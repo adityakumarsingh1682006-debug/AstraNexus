@@ -85,6 +85,7 @@ function CheckContent() {
   const [urlScanResult, setUrlScanResult] = useState<any>(null);
   const [urlScanError, setUrlScanError] = useState<string | null>(null);
   const [showTechnicalEvidence, setShowTechnicalEvidence] = useState(false);
+  const [showCertificateDetails, setShowCertificateDetails] = useState(false);
   const [expandedConcernId, setExpandedConcernId] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
 
@@ -759,7 +760,163 @@ function CheckContent() {
                 </div>
               )}
 
-              {/* 5. Optional Technical Details & Cryptographic Notary (Expandable for IT & Verification) */}
+              {/* 5. Digital Trust & Security Certificate */}
+              {urlScanResult.technical_evidence?.ssl_certificate && (
+                <div className="consumer-card p-6 sm:p-7 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start sm:items-center gap-2.5">
+                      <div
+                        className={cn(
+                          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0",
+                          urlScanResult.technical_evidence.ssl_certificate.has_ssl
+                            ? urlScanResult.technical_evidence.ssl_certificate.chain_verified &&
+                              !urlScanResult.technical_evidence.ssl_certificate.is_expired &&
+                              !urlScanResult.technical_evidence.ssl_certificate.hostname_mismatch
+                              ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60"
+                              : "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"
+                            : "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/60"
+                        )}
+                      >
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                          Digital Trust & TLS Certificate
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                          {urlScanResult.technical_evidence.ssl_certificate.consumer_explanation ||
+                            "Your connection to this website is encrypted, but this does not guarantee the website is legitimate."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCertificateDetails(!showCertificateDetails)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shrink-0 self-start sm:self-auto"
+                    >
+                      <span>{showCertificateDetails ? "Hide Certificate Details" : "View Certificate Details"}</span>
+                      {showCertificateDetails ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  {showCertificateDetails && (
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4 text-xs">
+                      {/* Certificate Validity Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Validity Status */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Certificate Status
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {urlScanResult.technical_evidence.ssl_certificate.validity_status || "UNKNOWN"}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {urlScanResult.technical_evidence.ssl_certificate.days_remaining != null
+                              ? `${urlScanResult.technical_evidence.ssl_certificate.days_remaining} days remaining`
+                              : "Validity duration unavailable"}
+                          </div>
+                        </div>
+
+                        {/* Issuer & Authority */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Certificate Authority
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white truncate">
+                            {urlScanResult.technical_evidence.ssl_certificate.issuer_organization ||
+                              urlScanResult.technical_evidence.ssl_certificate.issuer_common_name ||
+                              "Standard CA"}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Chain: {urlScanResult.technical_evidence.ssl_certificate.chain_verified ? "Verified against trust roots" : "Unverified / Custom chain"}
+                          </div>
+                        </div>
+
+                        {/* Cryptographic Key */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Cryptographic Security
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {urlScanResult.technical_evidence.ssl_certificate.public_key_algorithm || "RSA"} (
+                            {urlScanResult.technical_evidence.ssl_certificate.public_key_size || 2048} bits)
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Rating: {urlScanResult.technical_evidence.ssl_certificate.crypto_security_level || "STANDARD"}
+                          </div>
+                        </div>
+
+                        {/* Hostname Match */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Hostname Verification
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {urlScanResult.technical_evidence.ssl_certificate.hostname_matches
+                              ? "Matches Requested Host"
+                              : urlScanResult.technical_evidence.ssl_certificate.hostname_mismatch
+                              ? "Address Mismatch"
+                              : "Not Verified"}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate">
+                            CN: {urlScanResult.technical_evidence.ssl_certificate.subject_common_name || "N/A"}
+                          </div>
+                        </div>
+
+                        {/* Certificate Transparency */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Certificate Transparency
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {urlScanResult.technical_evidence.ssl_certificate.has_embedded_scts
+                              ? `${urlScanResult.technical_evidence.ssl_certificate.embedded_scts_count} Embedded SCTs`
+                              : "No Embedded SCTs"}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Audit log compliance (RFC 6962)
+                          </div>
+                        </div>
+
+                        {/* Revocation Status */}
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Revocation Status
+                          </span>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {urlScanResult.technical_evidence.ssl_certificate.revocation_status || "UNVERIFIED"}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {urlScanResult.technical_evidence.ssl_certificate.revocation_message ||
+                              "Revocation status could not be verified."}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Subject Alternative Names (SANs) */}
+                      {((urlScanResult.technical_evidence.ssl_certificate.subject_alt_names || []).length > 0) && (
+                        <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Subject Alternative Names (SANs) - {urlScanResult.technical_evidence.ssl_certificate.subject_alt_names.length} addresses
+                          </span>
+                          <div className="font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all leading-relaxed">
+                            {urlScanResult.technical_evidence.ssl_certificate.subject_alt_names.slice(0, 10).join(", ")}
+                            {urlScanResult.technical_evidence.ssl_certificate.subject_alt_names.length > 10 && " ... and more"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 6. Optional Technical Details & Cryptographic Notary (Expandable for IT & Verification) */}
               <div className="consumer-card rounded-2xl overflow-hidden border-slate-200 dark:border-slate-800">
                 <button
                   type="button"

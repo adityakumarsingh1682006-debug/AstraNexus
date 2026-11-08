@@ -85,7 +85,12 @@ async def scan_url(request: URLScanRequest):
     try:
         if is_resolvable:
             dns_res = dns_inspector.inspect(domain)
-            ssl_res = ssl_inspector.inspect(domain)
+            ssl_res = ssl_inspector.inspect(
+                hostname=domain,
+                port=parsed.port or (443 if parsed.scheme == "https" else 80),
+                scheme=parsed.scheme or "https",
+                pre_resolved_ips=resolved_ips,
+            )
             results = await asyncio.gather(
                 http_inspector.inspect(canonical_url),
                 urlhaus_client.lookup_url(canonical_url),
@@ -125,7 +130,12 @@ async def scan_url(request: URLScanRequest):
             # Network checks marked as unavailable
             ssl_res = {
                 "has_ssl": False,
+                "is_http_only": parsed.scheme == "http",
+                "validity_status": "NO_CERTIFICATE",
+                "consumer_explanation": "Could not check security certificate because the host could not be resolved in DNS.",
                 "error": "Host unreachable (DNS resolution failed)",
+                "revocation_status": "UNVERIFIED",
+                "revocation_message": "Revocation status could not be verified.",
             }
             http_res = {
                 "error": "Host unreachable (DNS resolution failed)",

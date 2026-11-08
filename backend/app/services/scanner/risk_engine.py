@@ -426,7 +426,47 @@ class RiskEngine:
             )
         else:
             if ssl_data.get("has_ssl"):
-                if ssl_data.get("is_self_signed"):
+                if ssl_data.get("is_distrusted_ca"):
+                    risk_score += 40
+                    threat_types.append("Distrusted Certificate Authority")
+                    concerns.append(
+                        Finding(
+                            id="distrusted-ca",
+                            category="TLS_CERTIFICATE",
+                            title="Distrusted Certificate Authority",
+                            concern_level=ConcernLevel.HIGH_CONCERN,
+                            plain_explanation=f"This website's security certificate was issued by an authority that has been globally distrusted by web browsers: {ssl_data.get('distrust_reason')}",
+                            technical_evidence={"issuer": ssl_data.get("issuer_organization"), "reason": ssl_data.get("distrust_reason")},
+                            check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        )
+                    )
+                    checks["tls_certificate"] = CheckItem(
+                        name="TLS / SSL Certificate",
+                        status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        summary=f"Issued by distrusted Certificate Authority ({ssl_data.get('issuer_organization') or 'Unknown'}).",
+                        details=ssl_data,
+                    )
+                elif ssl_data.get("hostname_mismatch"):
+                    risk_score += 30
+                    threat_types.append("SSL Hostname Mismatch")
+                    concerns.append(
+                        Finding(
+                            id="hostname-mismatch",
+                            category="TLS_CERTIFICATE",
+                            title="Security certificate address mismatch",
+                            concern_level=ConcernLevel.HIGH_CONCERN,
+                            plain_explanation=f"This website's security certificate was issued for {ssl_data.get('subject_common_name') or 'a different address'}, not the address you entered ({domain}). This frequently indicates an impersonation attempt or misconfigured hosting.",
+                            technical_evidence={"matched_name": ssl_data.get("matched_name"), "subject_common_name": ssl_data.get("subject_common_name"), "subject_alt_names": ssl_data.get("subject_alt_names")},
+                            check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        )
+                    )
+                    checks["tls_certificate"] = CheckItem(
+                        name="TLS / SSL Certificate",
+                        status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        summary=f"Certificate hostname mismatch: issued for {ssl_data.get('subject_common_name') or 'different host'}.",
+                        details=ssl_data,
+                    )
+                elif ssl_data.get("is_self_signed"):
                     risk_score += 30
                     threat_types.append("Self-Signed SSL Certificate")
                     concerns.append(
@@ -444,6 +484,26 @@ class RiskEngine:
                         name="TLS / SSL Certificate",
                         status=CheckStatusEnum.SUSPICIOUS_FINDING,
                         summary="Uses an untrusted, self-signed certificate.",
+                        details=ssl_data,
+                    )
+                elif not ssl_data.get("chain_verified", True):
+                    risk_score += 25
+                    threat_types.append("Untrusted Certificate Chain")
+                    concerns.append(
+                        Finding(
+                            id="untrusted-chain",
+                            category="TLS_CERTIFICATE",
+                            title="Untrusted security certificate chain",
+                            concern_level=ConcernLevel.HIGH_CONCERN,
+                            plain_explanation=f"The certificate chain could not be verified by standard trust roots: {ssl_data.get('verification_error') or 'Untrusted issuer'}.",
+                            technical_evidence={"verification_error": ssl_data.get("verification_error")},
+                            check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        )
+                    )
+                    checks["tls_certificate"] = CheckItem(
+                        name="TLS / SSL Certificate",
+                        status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        summary="Certificate chain verification failed against trusted roots.",
                         details=ssl_data,
                     )
                 elif ssl_data.get("is_expired"):
@@ -464,6 +524,26 @@ class RiskEngine:
                         name="TLS / SSL Certificate",
                         status=CheckStatusEnum.SUSPICIOUS_FINDING,
                         summary=f"Certificate expired on {ssl_data.get('valid_to')}.",
+                        details=ssl_data,
+                    )
+                elif ssl_data.get("is_weak_signature") or ssl_data.get("is_weak_key"):
+                    risk_score += 15
+                    threat_types.append("Weak Cryptographic Certificate")
+                    concerns.append(
+                        Finding(
+                            id="weak-cert-crypto",
+                            category="TLS_CERTIFICATE",
+                            title="Deprecated cryptographic algorithms in certificate",
+                            concern_level=ConcernLevel.MEDIUM_CONCERN,
+                            plain_explanation=f"The security certificate uses weak or deprecated cryptographic algorithms ({', '.join(ssl_data.get('crypto_warnings', []))}).",
+                            technical_evidence={"warnings": ssl_data.get("crypto_warnings"), "sig_algo": ssl_data.get("signature_algorithm")},
+                            check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        )
+                    )
+                    checks["tls_certificate"] = CheckItem(
+                        name="TLS / SSL Certificate",
+                        status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                        summary=f"Certificate uses deprecated cryptographic algorithms ({ssl_data.get('signature_hash_algorithm') or 'Weak'}).",
                         details=ssl_data,
                     )
                 else:
