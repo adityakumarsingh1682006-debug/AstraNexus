@@ -33,6 +33,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiEndpoint } from "@/lib/api";
 
 // Progress steps for URL scan
 const SCAN_STEPS = [
@@ -138,7 +139,7 @@ function CheckContent() {
     setIsVerifyingOnChain(true);
     setLiveVerificationResult(null);
     try {
-      const res = await fetch("/api/v1/registry/verify", {
+      const res = await fetch(getApiEndpoint("/api/v1/registry/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -239,7 +240,7 @@ function CheckContent() {
     }, 600);
 
     try {
-      const response = await fetch("/api/v1/scan/url", {
+      const response = await fetch(getApiEndpoint("/api/v1/scan/url"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target_url: clean }),
@@ -249,14 +250,19 @@ function CheckContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Unable to complete security scan at this time.");
+        throw new Error(errorData.detail || `Scan service error (HTTP ${response.status}). Unable to complete security scan.`);
       }
 
       const data = await response.json();
       setUrlScanResult(data);
     } catch (err: any) {
       clearInterval(interval);
-      setUrlScanError(err.message || "Failed to scan link. Please check the spelling and try again.");
+      const isNetworkErr = err?.name === "TypeError" && (err?.message?.includes("fetch") || err?.message?.includes("Network"));
+      setUrlScanError(
+        isNetworkErr
+          ? "Unable to connect to the AstraNexus scanning service. Please check network connectivity or backend status."
+          : (err.message || "Failed to scan link. Please check the spelling and try again.")
+      );
     } finally {
       setIsUrlScanning(false);
     }
@@ -275,7 +281,7 @@ function CheckContent() {
     setMessageError(null);
 
     try {
-      const response = await fetch("/api/v1/message/analyze", {
+      const response = await fetch(getApiEndpoint("/api/v1/message/analyze"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message_text: clean, channel_type: "AUTO" }),
@@ -283,7 +289,7 @@ function CheckContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Unable to analyze message at this time.");
+        throw new Error(errorData.detail || `Analysis service error (HTTP ${response.status}). Unable to analyze message.`);
       }
 
       const data = await response.json();
@@ -344,7 +350,12 @@ function CheckContent() {
 
       setMessageResult(safeResult);
     } catch (err: any) {
-      setMessageError(err.message || "Failed to analyze message. Please try again.");
+      const isNetworkErr = err?.name === "TypeError" && (err?.message?.includes("fetch") || err?.message?.includes("Network"));
+      setMessageError(
+        isNetworkErr
+          ? "Unable to connect to the AstraNexus analysis service. Please check network connectivity or backend status."
+          : (err.message || "Failed to analyze message. Please try again.")
+      );
     } finally {
       setIsMessageAnalyzing(false);
     }

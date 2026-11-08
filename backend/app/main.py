@@ -1,7 +1,38 @@
+import sys
+import types
+from pathlib import Path
+
+# ==============================================================================
+# Dynamic Environment & Import Resolution Bootstrap
+# Resolves package hierarchy whether deployed via:
+# - Monorepo root (Local dev & test runners: `from backend.app...`)
+# - Standalone directory / Serverless container (/var/task where `backend/` is root)
+# ==============================================================================
+_main_dir = Path(__file__).resolve().parent          # .../app
+_backend_dir = _main_dir.parent                     # .../backend (or /var/task)
+_repo_root = _backend_dir.parent                    # .../repo_root
+
+for _p in [str(_backend_dir), str(_repo_root), str(_main_dir)]:
+    if _p and _p not in sys.path:
+        sys.path.insert(0, _p)
+
+if "backend" not in sys.modules:
+    try:
+        import backend  # noqa: F401
+    except ImportError:
+        _backend_pkg = types.ModuleType("backend")
+        _backend_pkg.__path__ = [str(_backend_dir)]
+        sys.modules["backend"] = _backend_pkg
+
+if "app" in sys.modules and "backend.app" not in sys.modules:
+    sys.modules["backend.app"] = sys.modules["app"]
+    if hasattr(sys.modules.get("backend"), "__dict__"):
+        sys.modules["backend"].app = sys.modules["app"]
+
 import time
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from backend.app.core.config import settings
 from backend.app.core.exceptions import (
     SSRFSecurityViolation,
@@ -24,6 +55,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,3 +153,9 @@ async def root():
         "docs_url": f"{settings.API_V1_STR}/docs",
         "health_url": f"{settings.API_V1_STR}/health",
     }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/icon.svg", include_in_schema=False)
+async def favicon():
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiEndpoint } from "@/lib/api";
 
 interface ScamAlert {
   id: string;
@@ -40,10 +41,15 @@ export default function ScamAlertsPage() {
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>("alert-2026-001");
 
   useEffect(() => {
-    fetch("/api/v1/alerts")
-      .then((res) => res.json())
+    fetch(getApiEndpoint("/api/v1/alerts"))
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load alerts");
+        return res.json();
+      })
       .then((data) => {
-        setAlerts(data);
+        if (Array.isArray(data)) {
+          setAlerts(data);
+        }
         setLoading(false);
       })
       .catch(() => {

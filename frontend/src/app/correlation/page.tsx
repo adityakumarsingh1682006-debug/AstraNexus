@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiEndpoint } from "@/lib/api";
 
 interface CorrelatedNode {
   id: string;
@@ -88,8 +89,11 @@ export default function CorrelationPage() {
   const [liveReports, setLiveReports] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/v1/reports")
-      .then((res) => res.json())
+    fetch(getApiEndpoint("/api/v1/reports"))
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load reports");
+        return res.json();
+      })
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setLiveReports(data);

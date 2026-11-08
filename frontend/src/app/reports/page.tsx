@@ -12,6 +12,7 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiEndpoint } from "@/lib/api";
 
 interface ReportItem {
   id: string;
@@ -39,8 +40,11 @@ export default function ReportsPage() {
 
   // Fetch submitted reports
   const fetchReports = () => {
-    fetch("/api/v1/reports")
-      .then((res) => res.json())
+    fetch(getApiEndpoint("/api/v1/reports"))
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load reports");
+        return res.json();
+      })
       .then((data) => {
         // Also merge any local reports saved in localStorage
         const saved = localStorage.getItem("astranexus-local-reports");
@@ -77,7 +81,7 @@ export default function ReportsPage() {
     setFormError(null);
 
     try {
-      const response = await fetch("/api/v1/reports", {
+      const response = await fetch(getApiEndpoint("/api/v1/reports"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
