@@ -57,6 +57,8 @@ class TechnicalEvidence(BaseModel):
     urlhaus_match: Optional[Dict[str, Any]] = None
     openphish_match: Optional[Dict[str, Any]] = None
     google_safebrowsing_match: Optional[Dict[str, Any]] = None
+    phishtank_match: Optional[Dict[str, Any]] = None
+    virustotal_match: Optional[Dict[str, Any]] = None
     simulation_check: Optional[Dict[str, Any]] = None
     evidence_timeline: List[Dict[str, Any]] = Field(default_factory=list)
     evidence_hash: str

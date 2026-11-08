@@ -32,6 +32,8 @@ class RiskEngine:
         openphish_data: Dict[str, Any],
         google_safebrowsing_data: Optional[Dict[str, Any]] = None,
         simulation_data: Optional[Dict[str, Any]] = None,
+        phishtank_data: Optional[Dict[str, Any]] = None,
+        virustotal_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         risk_score = 0
         threat_types: List[str] = []
@@ -44,6 +46,8 @@ class RiskEngine:
         # Normalization defaults
         gsb_data = google_safebrowsing_data or {}
         sim_data = simulation_data or {}
+        pt_data = phishtank_data or {}
+        vt_data = virustotal_data or {}
 
         # Extract basic host/domain attributes
         registered_domain = typosquat_data.get("registered_domain") or domain
@@ -115,7 +119,7 @@ class RiskEngine:
                 summary="Matches official brand property.",
                 details={"brand": impersonated_brand},
             )
-            self._fill_telemetry_checks(checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data)
+            self._fill_telemetry_checks(checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data, vt_data)
 
             headline = f"Official verified website of {impersonated_brand}. Safe to proceed."
             advice = [
@@ -299,6 +303,97 @@ class RiskEngine:
                 status=CheckStatusEnum.NO_MATCH_FOUND,
                 summary="Clean: Zero matches in Google Safe Browsing lists.",
                 details=gsb_data,
+            )
+
+        # PhishTank
+        if pt_data.get("found"):
+            risk_score += 65
+            pt_threat = pt_data.get("threat") or "Verified Phishing Page"
+            threat_name = f"PhishTank: {pt_threat}"
+            threat_types.append(threat_name)
+            feed_matches.append(threat_name)
+            concerns.append(
+                Finding(
+                    id="phishtank-threat-match",
+                    category="EXTERNAL_THREAT_INTEL",
+                    title="Flagged in PhishTank verified phishing database",
+                    concern_level=ConcernLevel.HIGH_CONCERN,
+                    plain_explanation="This URL is confirmed in the PhishTank community database as an active verified phishing site.",
+                    technical_evidence=pt_data,
+                    check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                )
+            )
+            evidence_timeline.append({
+                "timestamp": now_iso,
+                "phase": "PhishTank Threat Feed",
+                "detail": f"Active verified phishing match: {pt_threat}.",
+                "status": "fail",
+            })
+            checks["threat_feed_phishtank"] = CheckItem(
+                name="PhishTank",
+                status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                summary=f"Active verified phishing match: {pt_threat}.",
+                details=pt_data,
+            )
+        elif pt_data.get("match_status") in ("API_UNAVAILABLE", "RATE_LIMITED", "AUTH_FAILURE", "INVALID_RESPONSE") or pt_data.get("error"):
+            checks["threat_feed_phishtank"] = CheckItem(
+                name="PhishTank",
+                status=CheckStatusEnum.UNAVAILABLE,
+                summary=f"Unavailable: {pt_data.get('error') or 'PhishTank API key not configured.'}",
+                details=pt_data,
+            )
+        else:
+            checks["threat_feed_phishtank"] = CheckItem(
+                name="PhishTank",
+                status=CheckStatusEnum.NO_MATCH_FOUND,
+                summary="Clean: Zero matches in PhishTank verified database.",
+                details=pt_data,
+            )
+
+        # VirusTotal
+        if vt_data.get("found"):
+            vt_risk_boost = 70 if vt_data.get("malicious_count", 0) >= 3 else 45
+            risk_score += vt_risk_boost
+            vt_threat = vt_data.get("threat") or "Multi-Engine Threat Flag"
+            threat_name = f"VirusTotal: {vt_threat}"
+            threat_types.append(threat_name)
+            feed_matches.append(threat_name)
+            concerns.append(
+                Finding(
+                    id="virustotal-threat-match",
+                    category="EXTERNAL_THREAT_INTEL",
+                    title="Flagged by security engines on VirusTotal",
+                    concern_level=ConcernLevel.HIGH_CONCERN,
+                    plain_explanation=f"VirusTotal multi-engine scanning detected security threats on this URL ({vt_data.get('evidence_reference') or 'malicious detection'}).",
+                    technical_evidence=vt_data,
+                    check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                )
+            )
+            evidence_timeline.append({
+                "timestamp": now_iso,
+                "phase": "VirusTotal v3",
+                "detail": f"Threat detected: {vt_threat}.",
+                "status": "fail",
+            })
+            checks["threat_feed_virustotal"] = CheckItem(
+                name="VirusTotal v3",
+                status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                summary=f"Threat flagged: {vt_threat}.",
+                details=vt_data,
+            )
+        elif vt_data.get("match_status") in ("API_UNAVAILABLE", "RATE_LIMITED", "AUTH_FAILURE", "INVALID_RESPONSE") or vt_data.get("error"):
+            checks["threat_feed_virustotal"] = CheckItem(
+                name="VirusTotal v3",
+                status=CheckStatusEnum.UNAVAILABLE,
+                summary=f"Unavailable: {vt_data.get('error') or 'VirusTotal API key not configured.'}",
+                details=vt_data,
+            )
+        else:
+            checks["threat_feed_virustotal"] = CheckItem(
+                name="VirusTotal v3",
+                status=CheckStatusEnum.NO_MATCH_FOUND,
+                summary="Clean: Zero malicious detections across VirusTotal engines.",
+                details=vt_data,
             )
 
         # -------------------------------------------------------------
@@ -822,7 +917,9 @@ class RiskEngine:
             recommendations=recommendations,
         )
 
-    def _fill_telemetry_checks(self, checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data):
+    def _fill_telemetry_checks(self, checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data=None, vt_data=None):
+        pt_data = pt_data or {}
+        vt_data = vt_data or {}
         if dns_data.get("a_records"):
             checks["dns_resolution"] = CheckItem(
                 name="DNS Resolution",
@@ -882,6 +979,18 @@ class RiskEngine:
             name="Google Safe Browsing",
             status=CheckStatusEnum.NO_MATCH_FOUND if gsb_data.get("configured") else CheckStatusEnum.UNAVAILABLE,
             summary="Clean" if gsb_data.get("configured") else "Unavailable: Google Safe Browsing API key not configured.",
+            details={},
+        )
+        checks["threat_feed_phishtank"] = CheckItem(
+            name="PhishTank",
+            status=CheckStatusEnum.NO_MATCH_FOUND if pt_data.get("match_status") == "NO_MATCH_FOUND" else CheckStatusEnum.UNAVAILABLE,
+            summary="Clean: Zero matches in PhishTank." if pt_data.get("match_status") == "NO_MATCH_FOUND" else "Unavailable: PhishTank API key not configured.",
+            details={},
+        )
+        checks["threat_feed_virustotal"] = CheckItem(
+            name="VirusTotal v3",
+            status=CheckStatusEnum.NO_MATCH_FOUND if vt_data.get("match_status") == "NO_MATCH_FOUND" else CheckStatusEnum.UNAVAILABLE,
+            summary="Clean: Zero detections on VirusTotal." if vt_data.get("match_status") == "NO_MATCH_FOUND" else "Unavailable: VirusTotal API key not configured.",
             details={},
         )
 

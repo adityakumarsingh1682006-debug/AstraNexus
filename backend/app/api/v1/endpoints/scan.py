@@ -18,6 +18,8 @@ from backend.app.services.scanner.simulation_detector import simulation_detector
 from backend.app.services.feeds.urlhaus import urlhaus_client
 from backend.app.services.feeds.openphish import openphish_client
 from backend.app.services.feeds.google_safe_browsing import google_safe_browsing_client
+from backend.app.services.feeds.phishtank import phishtank_client
+from backend.app.services.feeds.virustotal import virustotal_client
 from backend.app.services.scanner.risk_engine import risk_engine
 from backend.app.services.ai.gemini_explainer import gemini_explainer
 
@@ -96,22 +98,30 @@ async def scan_url(request: URLScanRequest):
                 urlhaus_client.lookup_url(canonical_url),
                 openphish_client.lookup(canonical_url, domain=domain),
                 google_safe_browsing_client.lookup_url(canonical_url),
+                phishtank_client.lookup_url(canonical_url),
+                virustotal_client.lookup_url(canonical_url),
                 return_exceptions=True
             )
             http_res = results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
-            urlhaus_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1])}
-            openphish_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2])}
-            gsb_res = results[3] if not isinstance(results[3], Exception) else {"found": False, "error": str(results[3])}
+            urlhaus_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1]), "match_status": "API_UNAVAILABLE"}
+            openphish_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2]), "match_status": "API_UNAVAILABLE"}
+            gsb_res = results[3] if not isinstance(results[3], Exception) else {"found": False, "error": str(results[3]), "match_status": "API_UNAVAILABLE"}
+            phishtank_res = results[4] if not isinstance(results[4], Exception) else {"found": False, "error": str(results[4]), "match_status": "API_UNAVAILABLE"}
+            vt_res = results[5] if not isinstance(results[5], Exception) else {"found": False, "error": str(results[5]), "match_status": "API_UNAVAILABLE"}
         else:
             results = await asyncio.gather(
                 urlhaus_client.lookup_url(canonical_url),
                 openphish_client.lookup(canonical_url, domain=domain),
                 google_safe_browsing_client.lookup_url(canonical_url),
+                phishtank_client.lookup_url(canonical_url),
+                virustotal_client.lookup_url(canonical_url),
                 return_exceptions=True
             )
-            urlhaus_res = results[0] if not isinstance(results[0], Exception) else {"found": False, "error": str(results[0])}
-            openphish_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1])}
-            gsb_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2])}
+            urlhaus_res = results[0] if not isinstance(results[0], Exception) else {"found": False, "error": str(results[0]), "match_status": "API_UNAVAILABLE"}
+            openphish_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1]), "match_status": "API_UNAVAILABLE"}
+            gsb_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2]), "match_status": "API_UNAVAILABLE"}
+            phishtank_res = results[3] if not isinstance(results[3], Exception) else {"found": False, "error": str(results[3]), "match_status": "API_UNAVAILABLE"}
+            vt_res = results[4] if not isinstance(results[4], Exception) else {"found": False, "error": str(results[4]), "match_status": "API_UNAVAILABLE"}
 
             dns_res = {
                 "domain": domain,
@@ -163,6 +173,8 @@ async def scan_url(request: URLScanRequest):
         openphish_data=openphish_res,
         google_safebrowsing_data=gsb_res,
         simulation_data=sim_res,
+        phishtank_data=phishtank_res,
+        virustotal_data=vt_res,
     )
 
     verdict = evaluation["verdict"]
@@ -182,6 +194,10 @@ async def scan_url(request: URLScanRequest):
         threat_matches.append("OpenPhish Verified Phishing Feed")
     if gsb_res.get("found"):
         threat_matches.append(f"Google Safe Browsing: {gsb_res.get('threat', 'Phishing')}")
+    if phishtank_res.get("found"):
+        threat_matches.append(f"PhishTank: {phishtank_res.get('threat', 'Verified Phishing')}")
+    if vt_res.get("found"):
+        threat_matches.append(f"VirusTotal: {vt_res.get('threat', 'Multi-Engine Detection')}")
 
     reasons = [c.plain_explanation for c in concerns if c.plain_explanation]
     if not reasons:
@@ -220,6 +236,8 @@ async def scan_url(request: URLScanRequest):
         urlhaus_match=urlhaus_res,
         openphish_match=openphish_res,
         google_safebrowsing_match=gsb_res,
+        phishtank_match=phishtank_res,
+        virustotal_match=vt_res,
         simulation_check=sim_res,
         evidence_timeline=evaluation["evidence_timeline"],
         evidence_hash=evaluation["evidence_hash"],

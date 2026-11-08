@@ -34,6 +34,22 @@ export interface ScanResult {
     found: boolean;
     threat_category?: string;
   };
+  google_safebrowsing_match?: {
+    found: boolean;
+    threat?: string;
+    threat_type?: string;
+  };
+  phishtank_match?: {
+    found: boolean;
+    threat?: string;
+    evidence_reference?: string;
+  };
+  virustotal_match?: {
+    found: boolean;
+    threat?: string;
+    malicious_count?: number;
+    total_engines?: number;
+  };
   ai_analysis?: {
     executive_summary?: string;
     brand_impersonation_target?: string;
