@@ -127,3 +127,77 @@ async def test_endpoint_end_to_end_analyze():
     assert len(res.extracted_links) == 1
     assert res.ai_explanation is not None
     assert isinstance(res.ai_explanation.get("what_to_do"), list)
+
+
+# ==============================================================================
+# ADVANCE-FEE EMPLOYMENT SCAM REGRESSION TESTS
+# ==============================================================================
+
+def test_regression_case_a_amazon_style_refundable_fee_job():
+    """Regression Test A: Amazon-style job requiring refundable registration fee.
+    Expected: Suspicious or High Risk (LIKELY_SCAM), Category: Fake Job Offer Scam.
+    """
+    msg = (
+        "Congratulations! You have been selected for an Amazon work-from-home job.\n"
+        "Earn Rs. 5,000 daily by completing simple tasks.\n"
+        "Pay a refundable registration fee of Rs. 499 to activate your account."
+    )
+    res = message_analyzer.analyze(msg)
+    assert res.verdict in ("SUSPICIOUS", "LIKELY_SCAM")
+    assert res.risk_score >= 60
+    assert "Job" in res.scam_category
+    assert any("Advance-Fee" in t or "Fee Demand" in t for t in res.manipulation_tactics)
+    assert any("Amazon" in t for t in res.manipulation_tactics)
+    assert any("5,000" in amt for amt in res.extracted_amounts)
+    assert any("499" in amt for amt in res.extracted_amounts)
+    assert len(res.consumer_advice) > 0
+    assert any("registration" in adv.lower() or "activation" in adv.lower() or "fee" in adv.lower() for adv in res.consumer_advice)
+
+
+def test_regression_case_b_legitimate_internship_advertisement():
+    """Regression Test B: Legitimate company internship advertisement with no payment.
+    Expected: Looks Safe or Low Risk (verdict: LOOKS_SAFE, risk_score < 30).
+    """
+    msg = (
+        "Acme Corp is hiring Summer Software Engineering Interns for our Seattle office. "
+        "Candidates should have coursework in Python and data structures. "
+        "Apply at our careers page: https://careers.acme.corp/jobs/123"
+    )
+    res = message_analyzer.analyze(msg)
+    assert res.verdict == "LOOKS_SAFE"
+    assert res.risk_score < 30
+    assert not any("Advance-Fee" in t for t in res.manipulation_tactics)
+    assert res.scam_category == "General Communication"
+
+
+def test_regression_case_c_unrealistic_earnings_without_fee_cautious():
+    """Regression Test C: Job promising unusually high earnings for simple tasks but requesting no payment.
+    Expected: Evaluate cautiously (SUSPICIOUS); do not automatically classify as confirmed malicious.
+    """
+    msg = (
+        "Work from home completing simple online tasks! "
+        "Earn $500 daily in your spare time. No experience needed. Start immediately."
+    )
+    res = message_analyzer.analyze(msg)
+    # Evaluates cautiously: SUSPICIOUS, but not confirmed malicious (risk_score < 60)
+    assert res.verdict == "SUSPICIOUS"
+    assert 30 <= res.risk_score < 60
+    assert any("Unusually High Earnings" in t for t in res.manipulation_tactics)
+    assert not any("Advance-Fee" in t for t in res.manipulation_tactics)
+
+
+def test_regression_case_d_upfront_refundable_activation_fee():
+    """Regression Test D: Job requiring an upfront refundable activation fee.
+    Expected: Suspicious or High Risk (risk_score >= 60).
+    """
+    msg = (
+        "You have been shortlisted for a remote data entry position. "
+        "Please pay a refundable activation fee of $49 to receive your employee portal credentials."
+    )
+    res = message_analyzer.analyze(msg)
+    assert res.verdict in ("SUSPICIOUS", "LIKELY_SCAM")
+    assert res.risk_score >= 60
+    assert "Job" in res.scam_category
+    assert any("Advance-Fee" in t or "Fee Demand" in t for t in res.manipulation_tactics)
+    assert any("49" in amt for amt in res.extracted_amounts)
+

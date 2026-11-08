@@ -1,0 +1,262 @@
+{
+  "check_1": {
+    "pass": true,
+    "frontend_check_status": 200,
+    "scan_url_status": 200,
+    "message_analyze_status": 200,
+    "url_verdict": "LOW_RISK",
+    "msg_verdict": "LOOKS_SAFE"
+  },
+  "check_2": {
+    "pass": true,
+    "status": 200,
+    "risk_score": 40,
+    "verdict": "SUSPICIOUS",
+    "summary": null,
+    "findings_count": 0,
+    "typosquatting": {
+      "registered_domain": "chase-security-verify.xyz",
+      "subdomain": "",
+      "full_host": "chase-security-verify.xyz",
+      "is_impersonation": true,
+      "impersonated_brand": "Chase Bank",
+      "legit_domain": "chase.com",
+      "brand_in_subdomain": false,
+      "brand_like_token": null,
+      "similarity_ratio": 0.9,
+      "techniques": [
+        "COMBOSQUATTING",
+        "CREDENTIAL_HARVESTING_AFFIX"
+      ],
+      "findings": [
+        {
+          "id": "combosquatting-domain",
+          "category": "BRAND_IMPERSONATION",
+          "title": "Domain stitches brand name 'Chase Bank'",
+          "concern_level": "HIGH_CONCERN",
+          "plain_explanation": "The domain name \"chase-security-verify.xyz\" includes the trademarked brand \"Chase Bank\", but is not owned or operated by Chase Bank (official: chase.com).",
+          "technical_evidence": {
+            "registered_domain": "chase-security-verify.xyz",
+            "brand_name": "Chase Bank",
+            "legit_domain": "chase.com"
+          }
+        },
+        {
+          "id": "credential-harvesting-affix",
+          "category": "DECEPTIVE_KEYWORD",
+          "title": "Uses deceptive security lure 'verify'",
+          "concern_level": "MEDIUM_CONCERN",
+          "plain_explanation": "The address combines a brand name with the word \"verify\" to create a false impression of security.",
+          "technical_evidence": {
+            "lure_word": "verify"
+          }
+        }
+      ],
+      "is_legit_brand_domain": false
+    },
+    "dns_records": {
+      "domain": "chase-security-verify.xyz",
+      "a_records": [],
+      "aaaa_records": [],
+      "mx_records": [],
+      "ns_records": [],
+      "txt_records": [],
+      "has_mx": false,
+      "has_spf": false,
+      "has_dmarc": false,
+      "resolution_time_ms": 0.0,
+      "error": "DNS resolution failed: [Errno 11001] getaddrinfo failed"
+    }
+  },
+  "check_3": {
+    "pass": true,
+    "has_ssl": true,
+    "issuer_common_name": "Cloudflare TLS Issuing ECC CA 3",
+    "valid_from": "2026-09-26T22:49:11+00:00",
+    "valid_to": "2026-12-25T22:56:35+00:00",
+    "days_remaining": 47,
+    "hostname_matches": true,
+    "san_count": 2,
+    "san_sample": [
+      "example.com",
+      "*.example.com"
+    ],
+    "public_key_algorithm": "EC",
+    "public_key_size": 256,
+    "signature_algorithm": "ecdsa-with-SHA256",
+    "embedded_scts_count": 2,
+    "cipher_suite": "TLS_AES_256_GCM_SHA384"
+  },
+  "check_4": {
+    "pass": true,
+    "status": 200,
+    "risk_score": 100,
+    "verdict": "LIKELY_SCAM",
+    "security_warnings": [
+      "Adversarial prompt injection pattern detected and neutralized."
+    ],
+    "ai_explanation": {
+      "source": "AstraNexus Deterministic Safety Rules",
+      "headline": "High Risk: Suspected Bank Impersonation",
+      "summary": "This message impersonates a financial institution and claims an account issue or unauthorized charge. Fraudsters use this technique to capture your online banking credentials or OTPs.",
+      "what_to_do": [
+        "Do NOT click any link or call the phone number inside the text.",
+        "Open your bank's official mobile application directly to check your account status.",
+        "Never share one-time passwords (OTPs) or debit card PINs with anyone."
+      ]
+    },
+    "extracted_links": [
+      "https://chase-security-verify.xyz/auth."
+    ]
+  },
+  "check_5": {
+    "pass": true,
+    "status": 200,
+    "similar_reports_count": 5,
+    "unique_reporters_count": 5,
+    "confirmed_incidents_count": 1,
+    "suspected_campaign_name": "Credential Harvesting Campaign: Financial Institution KYC Spoofing Cluster",
+    "cases_found": 5,
+    "cases_sample": [
+      {
+        "id": "rep-e9ad9166",
+        "match": "EXACT_INDICATOR",
+        "indicator": "https://chase-security-verify.xyz/auth"
+      },
+      {
+        "id": "rep-fc22cce5",
+        "match": "EXACT_INDICATOR",
+        "indicator": "https://chase-security-verify.xyz/auth"
+      },
+      {
+        "id": "rep-7597a235",
+        "match": "EXACT_INDICATOR",
+        "indicator": "https://chase-security-verify.xyz/auth"
+      }
+    ]
+  },
+  "check_6": {
+    "pass": true,
+    "status": 200,
+    "count": 10,
+    "all_gov_domains": true,
+    "sample_links": [
+      {
+        "title": "How to Spot, Stop, & Avoid Package Delivery Scams",
+        "publisher": "Federal Trade Commission (FTC)",
+        "url": "https://consumer.ftc.gov/articles/how-spot-stop-avoid-package-delivery-scams"
+      },
+      {
+        "title": "Smishing: Package Tracking Text Scams & Redelivery Fraud",
+        "publisher": "U.S. Postal Inspection Service (USPIS)",
+        "url": "https://www.uspis.gov/news/scam-article/smishing-package-tracking-text-scams"
+      },
+      {
+        "title": "Bank Impersonators Want to Help You Move Your Money: How Callers and Texts Pretend to Be Your Bank",
+        "publisher": "Federal Trade Commission (FTC)",
+        "url": "https://consumer.ftc.gov/consumer-alerts/2023/11/bank-impersonators-want-help-you-move-your-money"
+      },
+      {
+        "title": "Scammers Impersonating Financial Institutions and Law Enforcement in Urgent Wire Transfer Schemes",
+        "publisher": "FBI Internet Crime Complaint Center (IC3)",
+        "url": "https://www.ic3.gov/Media/Y2024/PSA240410"
+      }
+    ],
+    "reachability_warning": "FTC and IC3 official .gov links return 404 when directly probed via HTTP client (links may require human browser session or specific slug parameters). Presenter should avoid clicking external links live."
+  },
+  "check_7": {
+    "pass": true,
+    "report_route_status": 200,
+    "reports_route_status": 200,
+    "file_report_exists": true,
+    "file_reports_exists": true,
+    "behavior_note": "/report renders client router.replace('/reports') to open the reporting dashboard"
+  },
+  "check_8": {
+    "pass": true,
+    "status_code": 201,
+    "report_id": "rep-20e8f345",
+    "commitment_hash": "0xb0949fc3b4ecd8c38bdf12a41544fd8ab83617d2f961cc2826f53794045f0541",
+    "tx_hash": "0x9d5ab847d1cb85591961fd189661be31cf27ddc3e2a7b76b66a786fedeb8ae4e",
+    "block_number": "0xc",
+    "gas_used": "0x3ccd4",
+    "receipt_status": "0x1"
+  },
+  "check_9": {
+    "pass": true,
+    "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "report_id": "rep-20e8f345",
+    "expected_commitment": "0xb0949fc3b4ecd8c38bdf12a41544fd8ab83617d2f961cc2826f53794045f0541",
+    "on_chain_commitment": "0xb0949fc3b4ecd8c38bdf12a41544fd8ab83617d2f961cc2826f53794045f0541",
+    "on_chain_exists": true,
+    "commitments_match": true
+  },
+  "check_10": {
+    "pass": true,
+    "original_commitment": "0xb0949fc3b4ecd8c38bdf12a41544fd8ab83617d2f961cc2826f53794045f0541",
+    "tampered_commitment": "0xb0949fc3b4ecd8c38bdf12a41544fd8ab83617d2f961cc2826f53794045f0000",
+    "matches_on_chain": false,
+    "integrity_verdict": "MISMATCH",
+    "report_exists": true
+  },
+  "check_11": {
+    "pass": true,
+    "routes": {
+      "/": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/check": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/report": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/reports": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/alerts": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/correlation": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/verify": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      },
+      "/settings": {
+        "status": 200,
+        "has_css": true,
+        "has_chunks": true
+      }
+    }
+  },
+  "check_12": {
+    "pass": true,
+    "documented_order": [
+      "Step 1: Start Hardhat node (npm run node --prefix blockchain)",
+      "Step 2: Deploy ThreatRegistry contract (npm run deploy:local --prefix blockchain)",
+      "Step 3: Start FastAPI backend (uvicorn app.main:app --app-dir backend --port 8000)",
+      "Step 4: Start Next.js frontend (npm run start --prefix frontend)"
+    ],
+    "current_status": {
+      "hardhat_node": "RUNNING on 127.0.0.1:8545",
+      "contract_deployment": "DEPLOYED at 0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "fastapi_backend": "RUNNING on 127.0.0.1:8000",
+      "nextjs_frontend": "RUNNING on localhost:3000"
+    }
+  }
+}

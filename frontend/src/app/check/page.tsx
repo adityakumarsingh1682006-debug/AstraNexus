@@ -52,6 +52,8 @@ export interface DetectedTacticItem {
 
 export interface MessageAnalysisData {
   verdict: string;
+  risk_classification?: string;
+  risk_classification_description?: string;
   consumer_headline: string;
   consumer_advice: string[];
   risk_score: number;
@@ -375,39 +377,38 @@ function CheckContent() {
     setTimeout(() => setCopiedHash(false), 2000);
   };
 
-  // Helper for check status pill and icons
+  // Helper for check status pill and icons (Strictly: PASSED, FLAGGED, UNAVAILABLE, NOT APPLICABLE)
   const getCheckStatusBadge = (status: string) => {
     switch (status) {
+      case "PASSED":
       case "COMPLETED":
+      case "NO_MATCH_FOUND":
         return {
           icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />,
-          label: "Completed",
+          label: "PASSED",
           classes: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
         };
+      case "FLAGGED":
       case "SUSPICIOUS_FINDING":
         return {
           icon: <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />,
-          label: "Suspicious finding",
+          label: "FLAGGED",
           classes: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
         };
-      case "NO_MATCH_FOUND":
-        return {
-          icon: <Check className="w-4 h-4 text-sky-600 shrink-0" />,
-          label: "No match found",
-          classes: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
-        };
       case "UNAVAILABLE":
+      case "FAILED":
         return {
           icon: <MinusCircle className="w-4 h-4 text-slate-400 shrink-0" />,
-          label: "Unavailable",
+          label: "UNAVAILABLE",
           classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
         };
-      case "FAILED":
+      case "NOT_APPLICABLE":
+      case "NOT APPLICABLE":
       default:
         return {
-          icon: <XCircle className="w-4 h-4 text-rose-500 shrink-0" />,
-          label: "Failed",
-          classes: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+          icon: <MinusCircle className="w-4 h-4 text-zinc-400 shrink-0" />,
+          label: "NOT APPLICABLE",
+          classes: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
         };
     }
   };
@@ -443,7 +444,7 @@ function CheckContent() {
     }
   };
 
-  // Helper for Verdict Styling
+  // Helper for Unified 5-Level Verdict Styling & Descriptions
   const getVerdictPresentation = (verdict: string) => {
     switch (verdict) {
       case "CONFIRMED_MALICIOUS":
@@ -452,6 +453,8 @@ function CheckContent() {
           icon: <XCircle className="w-8 h-8 text-rose-600 shrink-0" />,
           badge: "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200 border-rose-300",
           title: "Confirmed Malicious",
+          classification: "CONFIRMED MALICIOUS",
+          description: "Supported by authoritative threat intelligence or sufficiently validated evidence.",
         };
       case "PHISHING_SIMULATION":
         return {
@@ -459,13 +462,18 @@ function CheckContent() {
           icon: <FlaskConical className="w-8 h-8 text-indigo-600 shrink-0" />,
           badge: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200 border-indigo-300",
           title: "Phishing Simulation",
+          classification: "SUSPICIOUS",
+          description: "Recognized security benchmark or phishing diagnostic test page.",
         };
       case "HIGH_RISK":
+      case "LIKELY_SCAM":
         return {
           border: "border-l-rose-500 bg-rose-50/30 dark:bg-rose-950/20",
           icon: <AlertTriangle className="w-8 h-8 text-rose-500 shrink-0" />,
           badge: "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200 border-rose-300",
           title: "High Risk",
+          classification: "HIGH RISK",
+          description: "Multiple significant indicators suggest a substantial security threat.",
         };
       case "SUSPICIOUS":
         return {
@@ -473,6 +481,8 @@ function CheckContent() {
           icon: <AlertTriangle className="w-8 h-8 text-amber-500 shrink-0" />,
           badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border-amber-300",
           title: "Suspicious",
+          classification: "SUSPICIOUS",
+          description: "One or more indicators require further investigation.",
         };
       case "INCONCLUSIVE":
         return {
@@ -480,6 +490,8 @@ function CheckContent() {
           icon: <HelpCircle className="w-8 h-8 text-slate-500 shrink-0" />,
           badge: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300",
           title: "Inconclusive",
+          classification: "INCONCLUSIVE",
+          description: "Insufficient data or unavailable verification sources.",
         };
       case "LOW_RISK":
       case "LOOKS_SAFE":
@@ -489,6 +501,8 @@ function CheckContent() {
           icon: <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />,
           badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border-emerald-300",
           title: "Low Risk",
+          classification: "LOW RISK",
+          description: "No significant malicious indicators identified within the available checks.",
         };
     }
   };
@@ -693,7 +707,7 @@ function CheckContent() {
                                 presentation.badge
                               )}
                             >
-                              {presentation.title}
+                              {(urlScanResult as any).risk_classification || presentation.classification || presentation.title}
                             </span>
                             <span className="text-xs text-slate-500 font-medium">
                               Confidence: {Math.round(urlScanResult.confidence_score)}%
@@ -702,6 +716,9 @@ function CheckContent() {
                           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-1 leading-snug">
                             {urlScanResult.consumer_headline}
                           </h2>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                            {(urlScanResult as any).risk_classification_description || presentation.description}
+                          </p>
                         </div>
                       </div>
 
@@ -1775,54 +1792,52 @@ function CheckContent() {
           {messageResult && !isMessageAnalyzing && (
             <div className="space-y-6">
               {/* Verdict Header */}
-              <div
-                className={cn(
-                  "consumer-card p-6 sm:p-7 border-l-8 space-y-4",
-                  messageResult.verdict === "LIKELY_SCAM"
-                    ? "border-l-rose-500 bg-rose-50/30 dark:bg-rose-950/20"
-                    : messageResult.verdict === "SUSPICIOUS"
-                    ? "border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/20"
-                    : "border-l-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20"
-                )}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {messageResult.verdict === "LIKELY_SCAM" ? (
-                      <XCircle className="w-8 h-8 text-rose-600 shrink-0" />
-                    ) : messageResult.verdict === "SUSPICIOUS" ? (
-                      <AlertTriangle className="w-8 h-8 text-amber-600 shrink-0" />
-                    ) : (
-                      <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
+              {(() => {
+                const presentation = getVerdictPresentation(messageResult.verdict);
+                return (
+                  <div
+                    className={cn(
+                      "consumer-card p-6 sm:p-7 border-l-8 space-y-4",
+                      presentation.border
                     )}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start sm:items-center gap-3">
+                        {presentation.icon}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider inline-block border",
+                                presentation.badge
+                              )}
+                            >
+                              {messageResult.risk_classification || presentation.classification || presentation.title}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">
+                              Confidence: {Math.round(messageResult.confidence_score)}%
+                            </span>
+                          </div>
+                          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-1 leading-snug">
+                            {messageResult.consumer_headline}
+                          </h2>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                            {messageResult.risk_classification_description || presentation.description}
+                          </p>
+                        </div>
+                      </div>
 
-                    <div>
-                      <span
-                        className={cn(
-                          "px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider inline-block",
-                          messageResult.verdict === "LIKELY_SCAM"
-                            ? "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
-                            : messageResult.verdict === "SUSPICIOUS"
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200"
-                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
-                        )}
+                      <button
+                        onClick={() => performMessageAnalysis(messageText)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 shrink-0 self-start sm:self-center"
                       >
-                        {messageResult.verdict.replace(/_/g, " ")}
-                      </span>
-                      <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                        {messageResult.consumer_headline}
-                      </h2>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Re-analyze</span>
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => performMessageAnalysis(messageText)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 shrink-0 self-start sm:self-center"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Re-analyze</span>
-                  </button>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* What You Should Do & Tactics */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

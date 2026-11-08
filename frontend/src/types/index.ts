@@ -7,6 +7,8 @@ export interface ScanResult {
   domain: string;
   ip_address?: string;
   verdict: ThreatVerdict;
+  risk_classification?: string;
+  risk_classification_description?: string;
   risk_score: number;
   threat_types: string[];
   confidence_score: number;

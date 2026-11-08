@@ -307,6 +307,91 @@ class TyposquatDetector:
                     })
                     return results
 
+        # 6. Deceptive Domain Structure & Authentication Lure Analysis
+        # Generic heuristic analysis independent of specific brand trademarks
+        if subdomain:
+            subdomain_parts = [p for p in subdomain.split(".") if p]
+            subdomain_tokens = [w for p in subdomain_parts for w in re.split(r"[-_]", p) if w]
+
+            matched_subdomain_kws = [
+                kw for kw in SUSPICIOUS_KEYWORD_AFFIXES
+                if kw in subdomain_tokens or any(kw == t for t in subdomain_tokens) or any(kw in p for p in subdomain_parts)
+            ]
+
+            sensitive_action_paths = [
+                "/update", "/login", "/verify", "/account", "/auth", "/signin",
+                "/confirm", "/recovery", "/password", "/security", "/portal", "/wallet",
+                "/billing", "/authenticate", "/validate"
+            ]
+            matched_path = next(
+                (p for p in sensitive_action_paths if path == p or path.startswith(p + "/") or path.startswith(p + "?")),
+                None
+            )
+
+            # Detect deceptive keyword chaining in subdomain (e.g. secure-login-verify-account)
+            has_keyword_chain = len(matched_subdomain_kws) >= 2 or (
+                len(matched_subdomain_kws) >= 1 and (matched_path is not None or len(subdomain_parts) >= 2)
+            )
+
+            if has_keyword_chain:
+                results["deceptive_structure"] = True
+                results["matched_subdomain_keywords"] = matched_subdomain_kws
+                results["techniques"].append("DECEPTIVE_SUBDOMAIN_KEYWORDS")
+
+                results["findings"].append({
+                    "id": "deceptive-subdomain-keywords",
+                    "category": "URL_STRUCTURE",
+                    "title": "Deceptive authentication keywords in subdomain",
+                    "concern_level": "MEDIUM_CONCERN",
+                    "plain_explanation": (
+                        f'The subdomain "{subdomain}" chains deceptive authentication and security keywords '
+                        f'({", ".join(matched_subdomain_kws)}) commonly used in credential harvesting lures to mimic authentic verification portals.'
+                    ),
+                    "technical_evidence": {
+                        "subdomain": subdomain,
+                        "matched_keywords": matched_subdomain_kws,
+                        "registered_domain": registered_domain,
+                    },
+                })
+
+            # Detect sensitive action paths (e.g. /update, /login, /verify)
+            if matched_path:
+                results["sensitive_action_path"] = matched_path
+                results["techniques"].append("SENSITIVE_ACTION_PATH")
+                results["findings"].append({
+                    "id": "sensitive-action-path",
+                    "category": "URL_STRUCTURE",
+                    "title": "Sensitive account action path",
+                    "concern_level": "LOW_CONCERN",
+                    "plain_explanation": (
+                        f'The URL path "{path}" targets a sensitive account action ({matched_path}), '
+                        f'a pattern frequently seen in credential harvesting and phishing lures.'
+                    ),
+                    "technical_evidence": {
+                        "path": path,
+                        "matched_action": matched_path,
+                    },
+                })
+
+            # Detect high subdomain depth or complexity
+            if len(subdomain_parts) >= 3 or len(subdomain_tokens) >= 4:
+                results["findings"].append({
+                    "id": "high-subdomain-depth",
+                    "category": "SUBDOMAIN_ANALYSIS",
+                    "title": "Unusual subdomain depth and complexity",
+                    "concern_level": "LOW_CONCERN",
+                    "plain_explanation": (
+                        f'The website uses an unusually complex subdomain structure ({subdomain}), '
+                        f'which can be used to obfuscate the real registered destination domain ({registered_domain}).'
+                    ),
+                    "technical_evidence": {
+                        "subdomain": subdomain,
+                        "depth": len(subdomain_parts),
+                        "token_count": len(subdomain_tokens),
+                        "registered_domain": registered_domain,
+                    },
+                })
+
         return results
 
 

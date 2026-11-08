@@ -28,7 +28,7 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 
-from backend.app.schemas.message import MessageScanResponse, DetectedTactic
+from backend.app.schemas.message import MessageScanResponse, DetectedTactic, UnifiedVerdict
 from backend.app.services.intelligence.threat_correlator import threat_correlator
 
 # ==============================================================================
@@ -41,9 +41,45 @@ BANKING_IMPERSONATION_PATTERNS = [
 ]
 
 JOB_OFFER_PATTERNS = [
-    r"\b(part-time job|earn \$[0-9]+|work from home daily income|earn (?:dollars|usd|per day))\b",
-    r"\b(like youtube videos|rate hotels|watch videos to earn|telegram task group|vip task|pre-fund task|task commission)\b",
-    r"\b(daily salary|guaranteed daily wage|hiring remote assistants|flexible part-time hours)\b",
+    r"\b(?:work\s*[-–—]?\s*from\s*[-–—]?\s*home|home\s*[-–—]?\s*based\s+job|remote\s+(?:job|work|position|assistant|gig|data\s+entry|role))\b",
+    r"\b(?:part-time job|part\s*[-–—]?\s*time\s+(?:work|income|tasks?|role|position)|telegram task group|vip task|pre-fund task|task commission|order grabbing)\b",
+    r"\b(?:like youtube videos|rate hotels|watch videos to earn|review products to earn|subscribing to channels)\b",
+    r"\b(?:simple|easy|daily|online)\s+tasks?\b",
+    r"\b(?:congratulations\s+)?(?:you\s+have\s+been\s+)?(?:selected|shortlisted|approved|hired)\s+for\s+(?:an?\s+)?[a-zA-Z0-9_\s-]{0,35}?(?:job|position|role|employment|vacancy)\b",
+    r"\b(?:daily salary|guaranteed daily wage|flexible part-time hours|daily payout)\b",
+]
+
+RECRUITMENT_ADVANCE_FEE_PATTERNS = [
+    (
+        r"\b(?:pay|deposit|transfer|send|submit)\s+(?:a\s+)?(?:refundable\s+)?(?:registration|activation|joining|onboarding|application|verification|portal|account)\s+(?:fee|charge|deposit|amount)\b",
+        "Upfront Job Registration / Activation Fee Demand",
+    ),
+    (
+        r"\b(?:refundable\s+)?(?:registration|activation|joining|onboarding|account\s+activation)\s+(?:fee|charges?|deposit|amount)\b",
+        "Mandatory Job Registration / Activation Fee",
+    ),
+    (
+        r"\b(?:fee|deposit|charge|amount)\s+(?:of\s+)?(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+\s+(?:to\s+(?:activate|register|start|join|unlock|onboard))\b",
+        "Fee Required to Activate Account or Start Work",
+    ),
+    (
+        r"\b(?:refundable\s+(?:fee|deposit|charge))\b",
+        "Refundable Fee / Deposit Lure",
+    ),
+    (
+        r"\b(?:pay|deposit)\s+(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+\s+(?:as\s+(?:a\s+)?(?:registration|activation|security)|to\s+activate)\b",
+        "Advance Fee to Activate Account",
+    ),
+]
+
+UNREALISTIC_EARNINGS_PATTERNS = [
+    r"\b(?:earn|earning|income\s+of|salary\s+of|make)\s+(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+(?:\s*(?:to|-)\s*(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+)?\s*(?:daily|per\s+day|every\s*day|per\s+hour|hourly|per\s+task)\b",
+    r"(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)[\d,]+(?:\s*(?:to|-)\s*(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+)?\s*(?:daily|per\s+day|every\s*day|per\s+hour|hourly|per\s+task)\b",
+    r"\bearn (?:dollars|usd|rupees|inr)\s+per\s+day\b",
+]
+
+RECRUITMENT_BRAND_PATTERNS = [
+    (r"\b(amazon|flipkart|google|apple|microsoft|netflix|meta|youtube|telegram|tiktok|walmart|target|fedex)\b", "Major Corporation / Platform"),
 ]
 
 INVESTMENT_SCAM_PATTERNS = [
@@ -64,7 +100,7 @@ DELIVERY_SCAM_PATTERNS = [
 URGENT_PAYMENT_PATTERNS = [
     r"\b(electricity (?:will be )?disconnected|power shutoff tonight|unpaid electricity bill|water connection cut)\b",
     r"\b(power bill|electricity bill|utility bill|past due|prevent disconnection|disconnection notice)\b",
-    r"\b(pay(?:ing)?\s+(?:a\s+)?(?:[\$€£₹]\s?[\d,]+\s+)?(?:processing\s+|redelivery\s+)?fee)\b",
+    r"\b(pay(?:ing)?\s+(?:a\s+)?(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)?[\d,]+\s*(?:processing\s+|redelivery\s+|registration\s+|activation\s+)?fee)\b",
     r"\b(processing charge|wire transfer|send money|outstanding invoice|unpaid tax warrant|arrest warrant)\b",
     r"\b(pay via gift card|gift card|apple gift card|steam card|google play card|western union|vanilla visa)\b",
 ]
@@ -97,7 +133,11 @@ URL_REGEX = re.compile(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*", re.IGNO
 DOMAIN_REGEX = re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|xyz|top|info|site|online|live|shop|club|vip|biz|gov|edu|co|io)\b", re.IGNORECASE)
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 PHONE_REGEX = re.compile(r"(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
-AMOUNT_REGEX = re.compile(r"[\$€£₹]\s?[\d,]+(?:\.\d{2})?|\b\d+\s?(?:dollars|euros|pounds|rupees|usd|inr)\b", re.IGNORECASE)
+AMOUNT_REGEX = re.compile(
+    r"(?:[\$€£₹]|(?:rs\.?|inr|usd|eur|gbp)\s*)[\d,]+(?:\.\d{2})?"
+    r"|\b[\d,]+(?:\.\d{2})?\s*(?:dollars|euros|pounds|rupees|rs\.?|inr|usd|eur|gbp|bucks)\b",
+    re.IGNORECASE,
+)
 CRYPTO_REGEX = re.compile(r"\b(?:btc|bitcoin|eth|ethereum|usdt|tether|sol|solana)\b|\b0x[a-fA-F0-9]{40}\b|\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b", re.IGNORECASE)
 GIFT_CARD_REGEX = re.compile(r"\b(gift\s+card|apple\s+gift\s+card|steam\s+(?:wallet\s+)?card|google\s+play\s+card|vanilla\s+visa|razer\s+gold)\b", re.IGNORECASE)
 
@@ -188,23 +228,122 @@ class MessageAnalyzer:
                 scam_category = "Banking & Financial Impersonation"
                 break
 
-        # Check 2: Fake Job Offers
+        # Check 2: Fake Job Offers & Advance-Fee Recruitment Fraud
         has_job = False
+        has_job_lure = False
+        has_recruitment_advance_fee = False
+        is_explicit_task_fraud = False
+        job_lure_snippet = ""
         for pattern in JOB_OFFER_PATTERNS:
             match = re.search(pattern, lower_text)
             if match:
-                has_job = True
+                has_job_lure = True
+                job_lure_snippet = match.group(0)
+                break
+
+        has_recruitment_advance_fee = False
+        advance_fee_snippet = ""
+        for pattern, tactic_name in RECRUITMENT_ADVANCE_FEE_PATTERNS:
+            match = re.search(pattern, lower_text)
+            if match:
+                has_recruitment_advance_fee = True
+                advance_fee_snippet = match.group(0)
+                break
+
+        has_unrealistic_earnings = False
+        unrealistic_earnings_snippet = ""
+        for pattern in UNREALISTIC_EARNINGS_PATTERNS:
+            match = re.search(pattern, lower_text)
+            if match:
+                has_unrealistic_earnings = True
+                unrealistic_earnings_snippet = match.group(0)
+                break
+
+        recruitment_brand_matched = None
+        for pattern, entity_type in RECRUITMENT_BRAND_PATTERNS:
+            match = re.search(pattern, lower_text)
+            if match:
+                recruitment_brand_matched = match.group(0).title()
+                break
+
+        if has_recruitment_advance_fee:
+            has_job = True
+            scam_category = "Fake Job Offer Scam"
+            detected_tactics.append(DetectedTactic(
+                tactic="Advance-Fee Employment Fraud (Refundable / Registration Fee Demand)",
+                severity="high",
+                explanation="Demands an upfront registration, activation, or 'refundable' fee to start work or activate an account. Legitimate employers NEVER charge applicants fees.",
+                snippet=advance_fee_snippet,
+            ))
+            risk_score += 50
+
+            if has_job_lure:
+                detected_tactics.append(DetectedTactic(
+                    tactic="Unsolicited Job / Easy Task Bait",
+                    severity="high",
+                    explanation="Uses unsolicited work-from-home or task opportunities to entice the victim into paying advance fees.",
+                    snippet=job_lure_snippet,
+                ))
+                risk_score += 25
+
+            if has_unrealistic_earnings:
+                detected_tactics.append(DetectedTactic(
+                    tactic="Unrealistic Earnings Bait",
+                    severity="high",
+                    explanation="Promises inflated daily earnings for low-effort tasks to lure victims into paying upfront fees.",
+                    snippet=unrealistic_earnings_snippet,
+                ))
+                risk_score += 20
+
+            if recruitment_brand_matched:
+                detected_tactics.append(DetectedTactic(
+                    tactic=f"Impersonating {recruitment_brand_matched} Recruitment",
+                    severity="high",
+                    explanation=f"Claims affiliation with {recruitment_brand_matched} to fabricate corporate credibility. Major corporations never demand job activation fees via text.",
+                    snippet=recruitment_brand_matched,
+                ))
+                risk_score += 15
+
+        elif has_job_lure:
+            has_job = True
+            scam_category = "Fake Job Offer Scam"
+            is_explicit_task_fraud = any(re.search(p, lower_text) for p in [
+                r"\b(like youtube videos|rate hotels|watch videos to earn|telegram task group|vip task|pre-fund task|task commission|order grabbing)\b",
+                r"\btelegram\s+recruiter\b",
+            ])
+
+            if is_explicit_task_fraud:
                 detected_tactics.append(DetectedTactic(
                     tactic="Unsolicited Job / Easy Task Bait",
                     severity="high",
                     explanation="Promises effortless income (e.g. video liking or task deposits) to lure you into advance-fee fraud.",
-                    snippet=match.group(0),
+                    snippet=job_lure_snippet,
                 ))
                 risk_score += 40
-                if extracted_amounts or any(k in lower_text for k in ("daily", "telegram", "youtube", "whatsapp", "recruiter", "selected")):
+                if has_unrealistic_earnings or any(k in lower_text for k in ("daily", "telegram", "youtube", "whatsapp", "recruiter", "selected")):
                     risk_score += 25
-                scam_category = "Fake Job Offer Scam"
-                break
+            elif has_unrealistic_earnings:
+                # Requirement C: Job promising unusually high earnings for simple tasks but requesting no payment:
+                # Evaluate cautiously; do not automatically classify as confirmed malicious.
+                detected_tactics.append(DetectedTactic(
+                    tactic="Unusually High Earnings for Simple Tasks",
+                    severity="medium",
+                    explanation="Promises unusually high daily compensation for basic tasks without requesting an upfront fee. Proceed with caution and verify the employer through official corporate channels.",
+                    snippet=f"{job_lure_snippet}; {unrealistic_earnings_snippet}",
+                ))
+                risk_score += 35
+            elif any(re.search(p, lower_text) for p in [r"\b(?:simple|easy|daily|online)\s+tasks?\b"]):
+                detected_tactics.append(DetectedTactic(
+                    tactic="Task-Based Recruitment Lure",
+                    severity="medium",
+                    explanation="Promises compensation for repetitive online tasks. Often evolves into commission deposit traps.",
+                    snippet=job_lure_snippet,
+                ))
+                risk_score += 30
+            else:
+                # General legitimate job mention without task scheme, advance fee, or unrealistic earnings
+                scam_category = "General Communication"
+                has_job = False
 
         # Check 3: Investment Scams
         has_investment = False
@@ -315,7 +454,16 @@ class MessageAnalyzer:
                     snippet=match.group(0),
                 ))
                 # Only add substantial risk if combined with deceptive indicators
-                if has_banking or has_job or has_investment or has_lottery or has_delivery or has_urgent_payment or has_credential_harvesting or extracted_links:
+                if (
+                    has_banking
+                    or (has_job and (has_recruitment_advance_fee or is_explicit_task_fraud))
+                    or has_investment
+                    or has_lottery
+                    or has_delivery
+                    or has_urgent_payment
+                    or has_credential_harvesting
+                    or extracted_links
+                ):
                     risk_score += 25
                 else:
                     risk_score += 10
@@ -360,18 +508,31 @@ class MessageAnalyzer:
 
         final_score = min(100, risk_score)
 
-        # Verdict assignment
+        # Unified five-level risk classification assignment
         if final_score >= 60:
-            verdict = "LIKELY_SCAM"
-            headline = f"High Risk: Suspected {scam_category.lower()} detected."
-            advice = [
-                "Do NOT click any links in this message or open attachments.",
-                "Do NOT transfer funds, buy gift cards, or enter card details.",
-                "Block and report the sender on your messaging app or carrier.",
-                "Verify directly by logging in to the official service website or mobile app.",
-            ]
+            verdict = UnifiedVerdict("HIGH_RISK")
+            risk_classification = "HIGH RISK"
+            risk_classification_description = "Multiple significant indicators suggest a substantial security threat."
+            if "job" in scam_category.lower() and has_recruitment_advance_fee:
+                headline = "High Risk: Suspected Advance-Fee Job Scam Detected"
+                advice = [
+                    "Do NOT pay any registration, account activation, or refundable onboarding fees.",
+                    "Legitimate employers (including Amazon) NEVER require job seekers to pay money to begin work.",
+                    "Do not share bank account details, UPI PINs, or ID proofs with unverified recruiters.",
+                    "Verify job openings directly on the employer's official verified careers portal.",
+                ]
+            else:
+                headline = f"High Risk: Suspected {scam_category.lower()} detected."
+                advice = [
+                    "Do NOT click any links in this message or open attachments.",
+                    "Do NOT transfer funds, buy gift cards, or enter card details.",
+                    "Block and report the sender on your messaging app or carrier.",
+                    "Verify directly by logging in to the official service website or mobile app.",
+                ]
         elif final_score >= 30:
-            verdict = "SUSPICIOUS"
+            verdict = UnifiedVerdict("SUSPICIOUS")
+            risk_classification = "SUSPICIOUS"
+            risk_classification_description = "One or more indicators require further investigation."
             headline = "Caution Advised: Message contains deceptive or coercive patterns."
             advice = [
                 "Verify the sender's identity through an independent, trusted channel.",
@@ -379,7 +540,9 @@ class MessageAnalyzer:
                 "Never share one-time passcodes (OTPs), PINs, or passwords with anyone.",
             ]
         else:
-            verdict = "LOOKS_SAFE"
+            verdict = UnifiedVerdict("LOW_RISK")
+            risk_classification = "LOW RISK"
+            risk_classification_description = "No significant malicious indicators identified within the available checks."
             headline = "Standard Message: No common scam patterns detected."
             advice = [
                 "Always remain cautious when receiving unexpected messages from unfamiliar contacts.",
@@ -406,6 +569,8 @@ class MessageAnalyzer:
 
         return MessageScanResponse(
             verdict=verdict,
+            risk_classification=risk_classification,
+            risk_classification_description=risk_classification_description,
             consumer_headline=headline,
             consumer_advice=advice,
             risk_score=final_score,

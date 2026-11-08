@@ -21,11 +21,16 @@ class ConcernLevel(str, Enum):
 
 
 class CheckStatusEnum(str, Enum):
-    COMPLETED = "COMPLETED"
-    SUSPICIOUS_FINDING = "SUSPICIOUS_FINDING"
-    NO_MATCH_FOUND = "NO_MATCH_FOUND"
+    PASSED = "PASSED"
+    FLAGGED = "FLAGGED"
     UNAVAILABLE = "UNAVAILABLE"
-    FAILED = "FAILED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+    # Compatibility aliases for tests and components
+    COMPLETED = "PASSED"
+    SUSPICIOUS_FINDING = "FLAGGED"
+    NO_MATCH_FOUND = "PASSED"
+    FAILED = "UNAVAILABLE"
 
 
 class CheckItem(BaseModel):
@@ -74,6 +79,8 @@ class URLScanResponse(BaseModel):
     normalized_url: str
     domain: str
     verdict: RiskVerdict
+    risk_classification: Optional[str] = None
+    risk_classification_description: Optional[str] = None
     consumer_headline: str
     consumer_advice: List[str]
     risk_score: int  # 0 to 100

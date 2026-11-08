@@ -311,6 +311,8 @@ async def scan_url(request: URLScanRequest):
         normalized_url=canonical_url,
         domain=domain,
         verdict=verdict,
+        risk_classification=evaluation.get("risk_classification"),
+        risk_classification_description=evaluation.get("risk_classification_description"),
         consumer_headline=headline,
         consumer_advice=advice,
         risk_score=score,

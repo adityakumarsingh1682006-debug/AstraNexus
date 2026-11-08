@@ -70,6 +70,9 @@ class RiskEngine:
         except ValueError:
             is_ip_host = False
 
+        has_deceptive_structure = bool(typosquat_data.get("deceptive_structure"))
+        has_sensitive_path = bool(typosquat_data.get("sensitive_action_path"))
+
         if is_ip_host:
             risk_score += 25
             threat_types.append("Direct IP Hostname")
@@ -81,19 +84,40 @@ class RiskEngine:
                     concern_level=ConcernLevel.MEDIUM_CONCERN,
                     plain_explanation="This address uses a raw numerical IP address instead of a recognized website domain name, a technique frequently used to hide malicious server identities.",
                     technical_evidence={"host": parsed_target.hostname},
-                    check_status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                    check_status=CheckStatusEnum.FLAGGED,
                 )
             )
             checks["url_structure"] = CheckItem(
                 name="URL Structure",
-                status=CheckStatusEnum.SUSPICIOUS_FINDING,
+                status=CheckStatusEnum.FLAGGED,
                 summary="Uses numeric IP address instead of domain name.",
                 details={"host": parsed_target.hostname},
+            )
+        elif has_deceptive_structure or has_sensitive_path:
+            if has_deceptive_structure:
+                risk_score += 35
+                threat_types.append("Deceptive Subdomain Authentication Lure")
+            if has_sensitive_path:
+                risk_score += 10
+                threat_types.append("Sensitive Account Action Path")
+
+            matched_kws = typosquat_data.get("matched_subdomain_keywords", [])
+            kw_desc = f" ({', '.join(matched_kws)})" if matched_kws else ""
+            checks["url_structure"] = CheckItem(
+                name="URL Structure",
+                status=CheckStatusEnum.FLAGGED,
+                summary=f"Deceptive authentication keywords{kw_desc} or sensitive action path in URL structure.",
+                details={
+                    "subdomain": subdomain,
+                    "matched_keywords": matched_kws,
+                    "sensitive_path": typosquat_data.get("sensitive_action_path"),
+                    "registered_domain": registered_domain,
+                },
             )
         else:
             checks["url_structure"] = CheckItem(
                 name="URL Structure",
-                status=CheckStatusEnum.COMPLETED,
+                status=CheckStatusEnum.PASSED,
                 summary="Standard URL syntax and hierarchical formatting.",
                 details={"scheme": parsed_target.scheme, "path": parsed_target.path[:50]},
             )
@@ -248,19 +272,21 @@ class RiskEngine:
                 summary="Active phishing match in OpenPhish feed.",
                 details=openphish_data,
             )
-        elif openphish_data.get("feed_size", 0) == 0:
+        elif openphish_data.get("match_status") == "API_UNAVAILABLE" or (openphish_data.get("error") and not openphish_data.get("found")):
             checks["threat_feed_openphish"] = CheckItem(
                 name="OpenPhish Feed",
                 status=CheckStatusEnum.UNAVAILABLE,
                 summary="OpenPhish feed unavailable or empty cache.",
-                details={},
+                details={"error": openphish_data.get("error", "Feed cache empty")},
             )
         else:
+            feed_cnt = openphish_data.get("feed_size")
+            summary_txt = f"Clean: Not listed in active OpenPhish feed ({feed_cnt} indicators active)." if feed_cnt else "Clean: Not listed in active OpenPhish feed."
             checks["threat_feed_openphish"] = CheckItem(
                 name="OpenPhish Feed",
-                status=CheckStatusEnum.NO_MATCH_FOUND,
-                summary=f"Clean: Not listed in active OpenPhish feed ({openphish_data.get('feed_size')} indicators active).",
-                details={"feed_size": openphish_data.get("feed_size")},
+                status=CheckStatusEnum.PASSED,
+                summary=summary_txt,
+                details={"feed_size": feed_cnt},
             )
 
         # Google Safe Browsing
@@ -929,16 +955,29 @@ class RiskEngine:
         elif final_score >= 35:
             verdict = RiskVerdict.SUSPICIOUS
             confidence = 85.0
-            headline = "Suspicious Link: Exercise caution before trusting."
-            advice = [
-                "Double-check the address bar spelling carefully.",
-                "Do not enter sensitive account passwords or download files.",
-                "Access the intended service via official search or verified application instead.",
-            ]
-            recommendations = [
-                "Verify the web address carefully before interacting.",
-                "Do not provide credentials if the link was sent unsolicited.",
-            ]
+            if not has_dns_resolution:
+                headline = "Suspicious Link: Deceptive domain structure and authentication lures detected."
+                advice = [
+                    "The address contains suspicious deceptive keywords and sensitive action paths often used in credential harvesting.",
+                    "The domain could not be resolved in DNS (regional connection or DNS resolution failure), but structural indicators warrant caution.",
+                    "Do not enter credentials, passwords, or personal details on this link.",
+                ]
+                recommendations = [
+                    "Do not enter credentials or passwords on this address.",
+                    "Be aware that scammers frequently register deceptive subdomains that become active only during targeted attacks.",
+                    "Verify the genuine service portal through official channels.",
+                ]
+            else:
+                headline = "Suspicious Link: Exercise caution before trusting."
+                advice = [
+                    "Double-check the address bar spelling carefully.",
+                    "Do not enter sensitive account passwords or download files.",
+                    "Access the intended service via official search or verified application instead.",
+                ]
+                recommendations = [
+                    "Verify the web address carefully before interacting.",
+                    "Do not provide credentials if the link was sent unsolicited.",
+                ]
 
         # Scenario G: Unmatched URL without positive verification (NEVER claim verified safe)
         else:
@@ -1087,8 +1126,41 @@ class RiskEngine:
         canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
         evidence_hash = f"0x{hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()}"
 
+        UNIFIED_CLASSIFICATIONS = {
+            RiskVerdict.LOW_RISK: (
+                "LOW RISK",
+                "No significant malicious indicators identified within the available checks.",
+            ),
+            RiskVerdict.SUSPICIOUS: (
+                "SUSPICIOUS",
+                "One or more indicators require further investigation.",
+            ),
+            RiskVerdict.HIGH_RISK: (
+                "HIGH RISK",
+                "Multiple significant indicators suggest a substantial security threat.",
+            ),
+            RiskVerdict.CONFIRMED_MALICIOUS: (
+                "CONFIRMED MALICIOUS",
+                "Supported by authoritative threat intelligence or sufficiently validated evidence.",
+            ),
+            RiskVerdict.INCONCLUSIVE: (
+                "INCONCLUSIVE",
+                "Insufficient data or unavailable verification sources.",
+            ),
+            RiskVerdict.PHISHING_SIMULATION: (
+                "SUSPICIOUS",
+                "Recognized security benchmark or phishing diagnostic test page.",
+            ),
+        }
+        classification, classification_desc = UNIFIED_CLASSIFICATIONS.get(
+            verdict,
+            ("LOW RISK", "No significant malicious indicators identified within the available checks."),
+        )
+
         return {
             "verdict": verdict,
+            "risk_classification": classification,
+            "risk_classification_description": classification_desc,
             "risk_score": risk_score,
             "confidence_score": confidence_score,
             "consumer_headline": consumer_headline,
