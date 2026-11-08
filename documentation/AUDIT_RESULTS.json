@@ -1,0 +1,166 @@
+{
+  "functionality": {
+    "health": "PASSED",
+    "alerts": "PASSED",
+    "advisories": "PASSED",
+    "reports_list": "PASSED",
+    "similar_cases": "PASSED",
+    "registry_status": "PASSED"
+  },
+  "security": {
+    "ssrf_protection": "5/5 BLOCKED",
+    "input_validation": "PASSED",
+    "prompt_injection_defense": "PASSED (Flagged & Neutralized)"
+  },
+  "regression": {
+    "url_checks": "10/10 PASSED (avg 1.83s)",
+    "message_analyses": "10/10 PASSED (avg 0.01s)",
+    "frontend_pages": "6/6 HTTP 200 OK (CSS intact)"
+  },
+  "mandatory_cases": [
+    {
+      "name": "Case S1: Banking Credential Harvesting SMS",
+      "type": "SUSPICIOUS",
+      "input": {
+        "message_text": "CHASE SECURITY: Unauthorized transaction of $1,250.00 detected. If not you, secure your account now: https://chase-security-verify.xyz/auth",
+        "channel_type": "SMS"
+      },
+      "expected_verdict": "LIKELY_SCAM",
+      "actual_verdict": "LIKELY_SCAM",
+      "risk_score": 65,
+      "evidence": {
+        "detected_tactics": [
+          {
+            "tactic": "Impersonating Major Banking Institution",
+            "severity": "high",
+            "explanation": "Claims to be from Chase to gain immediate trust and induce compliance.",
+            "snippet": "chase"
+          },
+          {
+            "tactic": "High-Risk Domain / IP Link",
+            "severity": "high",
+            "explanation": "Contains links using high-abuse top-level domains or direct IP addresses.",
+            "snippet": "https://chase-security-verify.xyz/auth"
+          }
+        ],
+        "extracted_links": [
+          "https://chase-security-verify.xyz/auth"
+        ],
+        "correlation": true,
+        "advisories_count": 2
+      },
+      "status": "VERIFIED_CORRECT"
+    },
+    {
+      "name": "Case S2: Postal Redelivery Phishing URL",
+      "type": "SUSPICIOUS",
+      "input": {
+        "target_url": "https://usps-redelivery-fee-update.top/tracking/940010000000"
+      },
+      "expected_verdict": "SUSPICIOUS",
+      "actual_verdict": "SUSPICIOUS",
+      "risk_score": 40,
+      "evidence": {
+        "detected_tactics": null,
+        "extracted_links": null,
+        "correlation": false,
+        "advisories_count": 0
+      },
+      "status": "VERIFIED_CORRECT"
+    },
+    {
+      "name": "Case S3: Advance-Fee Video Liking Task Scam",
+      "type": "SUSPICIOUS",
+      "input": {
+        "message_text": "Congratulations! Selected for part-time remote work. Earn $350-$600 daily by liking YouTube videos. Contact Telegram mentor @TaskVipEarn",
+        "channel_type": "WHATSAPP"
+      },
+      "expected_verdict": "LIKELY_SCAM",
+      "actual_verdict": "LIKELY_SCAM",
+      "risk_score": 65,
+      "evidence": {
+        "detected_tactics": [
+          {
+            "tactic": "Unsolicited Job / Easy Task Bait",
+            "severity": "high",
+            "explanation": "Promises effortless income (e.g. video liking or task deposits) to lure you into advance-fee fraud.",
+            "snippet": "earn $350"
+          }
+        ],
+        "extracted_links": [],
+        "correlation": true,
+        "advisories_count": 1
+      },
+      "status": "VERIFIED_CORRECT"
+    },
+    {
+      "name": "Case B1: Casual Personal Lunch Plan",
+      "type": "BENIGN",
+      "input": {
+        "message_text": "Hey Marcus, are we still meeting for lunch at 12:30 PM tomorrow at the Italian bistro? Let me know!"
+      },
+      "expected_verdict": "LOOKS_SAFE",
+      "actual_verdict": "LOOKS_SAFE",
+      "risk_score": 0,
+      "evidence": {
+        "detected_tactics": null,
+        "extracted_links": [],
+        "correlation": true,
+        "advisories_count": 1
+      },
+      "status": "VERIFIED_CORRECT"
+    },
+    {
+      "name": "Case B2: Official IANA Reference Domain",
+      "type": "BENIGN",
+      "input": {
+        "target_url": "https://example.com"
+      },
+      "expected_verdict": "BENIGN",
+      "actual_verdict": "LOW_RISK",
+      "risk_score": 0,
+      "evidence": {
+        "detected_tactics": null,
+        "extracted_links": null,
+        "correlation": false,
+        "advisories_count": 0
+      },
+      "status": "VERIFIED_CORRECT"
+    },
+    {
+      "name": "Case B3: Operational Meeting Urgency (Urgency Alone Guardrail)",
+      "type": "BENIGN",
+      "input": {
+        "message_text": "Urgent reminder: Project roadmap sync starting immediately in conference room 3. Please join now."
+      },
+      "expected_verdict": "LOOKS_SAFE",
+      "actual_verdict": "LOOKS_SAFE",
+      "risk_score": 10,
+      "evidence": {
+        "detected_tactics": [
+          {
+            "tactic": "Artificial Urgency",
+            "severity": "medium",
+            "explanation": "Creates artificial time pressure (e.g. 'within 24 hours') to trigger hasty, unverified action.",
+            "snippet": "urgent"
+          }
+        ],
+        "extracted_links": [],
+        "correlation": true,
+        "advisories_count": 1
+      },
+      "status": "VERIFIED_CORRECT"
+    }
+  ],
+  "blockchain_demo": {
+    "registration": {
+      "report_id": "demo-hackathon-1794147351",
+      "tx_hash": "0x0779fd7f0452b3f6c7c112708b2e5b071185b1d3a2ad70ea991309e8052e2eb0",
+      "commitment_hash": "0xc0d6be8b21d5516ff24c3d335d33f0dd81e89dab774f1a9279c30ecbf87452d6",
+      "status": "CONFIRMED_ON_CHAIN"
+    },
+    "verification_valid": "TAMPER_EVIDENT_VERIFIED",
+    "verification_tampered": "COMMITMENT_MISMATCH (TAMPER DETECTED)",
+    "verification_unknown": "NOT_REGISTERED"
+  }
+}

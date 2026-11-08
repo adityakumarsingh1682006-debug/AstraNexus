@@ -85,11 +85,10 @@ SOCIAL_ENGINEERING_PATTERNS = [
 ]
 
 PROMPT_INJECTION_PATTERNS = [
-    r"\b(ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions)\b",
-    r"\b(system\s+prompt|developer\s+mode|dan\s+mode)\b",
-    r"\b(override\s+(?:the\s+)?safety\s+verdict)\b",
-    r"\b(output\s+only\s+(?:json|verdict)|return\s+looks_safe)\b",
-    r"\b(disregard\s+all\s+(?:rules|guidelines|instructions))\b",
+    r"\b(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)?\s*(?:instructions|rules|guidelines|prompts)\b",
+    r"\b(?:system\s+prompt|developer\s+mode|dan\s+mode|system\s+command)\b",
+    r"\b(?:override\s+(?:the\s+)?(?:safety\s+)?verdict)\b",
+    r"\b(?:output\s+(?:only\s+)?(?:json|verdict)|return\s+looks_safe)\b",
     r"<\s*script[^>]*>",
 ]
 
