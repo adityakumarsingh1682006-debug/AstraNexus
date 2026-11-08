@@ -86,8 +86,17 @@ function CheckContent() {
   const [urlScanError, setUrlScanError] = useState<string | null>(null);
   const [showTechnicalEvidence, setShowTechnicalEvidence] = useState(false);
   const [showCertificateDetails, setShowCertificateDetails] = useState(false);
+  const [showWebsiteSecurityDetails, setShowWebsiteSecurityDetails] = useState(false);
+  const [expandedSecurityFindings, setExpandedSecurityFindings] = useState<Record<string, boolean>>({});
   const [expandedConcernId, setExpandedConcernId] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
+
+  const toggleSecurityFinding = (id: string) => {
+    setExpandedSecurityFindings((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   // Message Analyzer States
   const [messageText, setMessageText] = useState(initialText);
@@ -908,6 +917,314 @@ function CheckContent() {
                           <div className="font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all leading-relaxed">
                             {urlScanResult.technical_evidence.ssl_certificate.subject_alt_names.slice(0, 10).join(", ")}
                             {urlScanResult.technical_evidence.ssl_certificate.subject_alt_names.length > 10 && " ... and more"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5b. Website Security Assessment (Passive Hygiene & Defenses) */}
+              {urlScanResult.technical_evidence?.website_security && (
+                <div className="consumer-card p-5 sm:p-6 rounded-2xl border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                            Website Security & Configuration Hygiene
+                          </h3>
+                          <span
+                            className={cn(
+                              "text-xs font-bold px-2.5 py-0.5 rounded-full border font-mono",
+                              ["A+", "A"].includes(urlScanResult.technical_evidence.website_security.grade)
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                : ["B", "C"].includes(urlScanResult.technical_evidence.website_security.grade)
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                            )}
+                          >
+                            Grade: {urlScanResult.technical_evidence.website_security.grade} ({urlScanResult.technical_evidence.website_security.score}/100)
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Safe passive assessment of HTTP security headers, transport encryption, and redirect paths
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowWebsiteSecurityDetails(!showWebsiteSecurityDetails)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors self-start sm:self-auto"
+                    >
+                      <span>{showWebsiteSecurityDetails ? "Hide Technical Details" : "View Full Security Details"}</span>
+                      {showWebsiteSecurityDetails ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Consumer explanation & distinction banner */}
+                  <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-start gap-3">
+                    <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                    <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      <strong className="text-slate-900 dark:text-white font-medium block mb-0.5">
+                        Understanding Security Hygiene vs. Scam Detection:
+                      </strong>
+                      {urlScanResult.technical_evidence.website_security.consumer_explanation}
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Badges */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Transport</div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-white mt-1 flex items-center gap-1.5">
+                        <Lock className={cn("w-3.5 h-3.5", urlScanResult.technical_evidence.website_security.transport_security?.is_https ? "text-emerald-500" : "text-rose-500")} />
+                        {urlScanResult.technical_evidence.website_security.transport_security?.is_https ? "HTTPS Secure" : "Insecure HTTP"}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Security Headers</div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-white mt-1">
+                        {urlScanResult.technical_evidence.website_security.security_headers?.configured_count || 0} / {urlScanResult.technical_evidence.website_security.security_headers?.total_evaluated || 5} Configured
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Redirect Hops</div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-white mt-1">
+                        {urlScanResult.technical_evidence.website_security.redirect_analysis?.has_redirects
+                          ? `${urlScanResult.technical_evidence.website_security.redirect_analysis.redirect_count} Hop(s)`
+                          : "Direct (0 Hops)"}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Mixed Content</div>
+                      <div className={cn(
+                        "text-xs font-semibold mt-1",
+                        urlScanResult.technical_evidence.website_security.mixed_content?.detected ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                      )}>
+                        {urlScanResult.technical_evidence.website_security.mixed_content?.detected ? "Detected (Insecure)" : "None Detected"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expandable Technical Details */}
+                  {showWebsiteSecurityDetails && (
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                      {/* Security Headers Breakdown */}
+                      {urlScanResult.technical_evidence.website_security.security_headers?.headers && (
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+                            HTTP Security Headers Audit
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {Object.entries(urlScanResult.technical_evidence.website_security.security_headers.headers).map(
+                              ([key, header]: [string, any]) => (
+                                <div
+                                  key={key}
+                                  className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                                      {header.standard_header}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                                        header.is_present
+                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                                      )}
+                                    >
+                                      {header.is_present ? "CONFIGURED" : "MISSING"}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {header.description}
+                                  </p>
+                                  {header.is_present && header.raw_value && (
+                                    <div className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded text-slate-700 dark:text-slate-300 truncate">
+                                      {header.raw_value}
+                                    </div>
+                                  )}
+                                  {!header.is_present && header.recommended_directive && (
+                                    <div className="text-[10px] text-slate-400">
+                                      Recommended: <code className="font-mono text-slate-600 dark:text-slate-300">{header.recommended_directive}</code>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Redirect Path Trace */}
+                      {urlScanResult.technical_evidence.website_security.redirect_analysis?.has_redirects && (
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                            Redirect Chain Audit ({urlScanResult.technical_evidence.website_security.redirect_analysis.redirect_count} Hops)
+                          </h4>
+                          <div className="space-y-1.5 p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 font-mono text-[11px]">
+                            {urlScanResult.technical_evidence.website_security.redirect_analysis.hops?.map((hop: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300 flex-wrap">
+                                <span className="font-bold text-slate-400">#{hop.hop_index}</span>
+                                <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold">
+                                  {hop.status_code}
+                                </span>
+                                <span className="truncate max-w-xs">{hop.from_url}</span>
+                                <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate max-w-xs text-blue-600 dark:text-blue-400">{hop.to_url}</span>
+                                {hop.is_cross_domain && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                    Cross-Domain
+                                  </span>
+                                )}
+                                {hop.is_downgrade && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-600 border border-rose-500/20 font-bold">
+                                    Downgrade to HTTP
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            <div className="pt-1 text-[11px] text-slate-500">
+                              Final Destination: <span className="text-slate-900 dark:text-white font-semibold">{urlScanResult.technical_evidence.website_security.redirect_analysis.final_destination}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Disclosed Software & Banners */}
+                      {(urlScanResult.technical_evidence.website_security.software_exposure?.server_banner ||
+                        urlScanResult.technical_evidence.website_security.software_exposure?.x_powered_by ||
+                        urlScanResult.technical_evidence.website_security.software_exposure?.meta_generator) && (
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                            Server & Software Headers
+                          </h4>
+                          <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1">
+                            {urlScanResult.technical_evidence.website_security.software_exposure.server_banner && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-mono text-[11px]">Server:</span>
+                                <code className="font-mono text-slate-700 dark:text-slate-300 font-semibold">{urlScanResult.technical_evidence.website_security.software_exposure.server_banner}</code>
+                              </div>
+                            )}
+                            {urlScanResult.technical_evidence.website_security.software_exposure.x_powered_by && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-mono text-[11px]">X-Powered-By:</span>
+                                <code className="font-mono text-slate-700 dark:text-slate-300 font-semibold">{urlScanResult.technical_evidence.website_security.software_exposure.x_powered_by}</code>
+                              </div>
+                            )}
+                            {urlScanResult.technical_evidence.website_security.software_exposure.meta_generator && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-mono text-[11px]">Meta Generator:</span>
+                                <code className="font-mono text-slate-700 dark:text-slate-300 font-semibold">{urlScanResult.technical_evidence.website_security.software_exposure.meta_generator}</code>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Technical Findings List (Expandable items) */}
+                      {((urlScanResult.technical_evidence.website_security.findings || []).length > 0) && (
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+                            Specific Findings & Hardening Recommendations ({urlScanResult.technical_evidence.website_security.findings.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {urlScanResult.technical_evidence.website_security.findings.map((f: any) => {
+                              const isExpanded = !!expandedSecurityFindings[f.id];
+                              return (
+                                <div
+                                  key={f.id}
+                                  className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900/70"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSecurityFinding(f.id)}
+                                    className="w-full p-3 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <span
+                                        className={cn(
+                                          "text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono uppercase",
+                                          f.severity === "CRITICAL"
+                                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                            : f.severity === "HIGH"
+                                            ? "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30"
+                                            : f.severity === "MEDIUM"
+                                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                            : "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                                        )}
+                                      >
+                                        {f.severity}
+                                      </span>
+                                      <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                                        {f.title}
+                                      </span>
+                                    </div>
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                                    ) : (
+                                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                                    )}
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div className="p-3.5 bg-slate-50/60 dark:bg-slate-900/40 border-t border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+                                      <div>
+                                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400 block mb-0.5">
+                                          Technical Evidence
+                                        </span>
+                                        <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-2 rounded break-all whitespace-pre-wrap">
+                                          {typeof f.technical_evidence === "object"
+                                            ? JSON.stringify(f.technical_evidence, null, 2)
+                                            : String(f.technical_evidence)}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400 block mb-0.5">
+                                          Potential Impact
+                                        </span>
+                                        <div className="text-slate-600 dark:text-slate-300">
+                                          {f.potential_impact}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400 block mb-0.5">
+                                          Recommended Remediation
+                                        </span>
+                                        <div className="text-emerald-700 dark:text-emerald-400 font-mono text-[11px] bg-emerald-500/5 p-2 rounded border border-emerald-500/20">
+                                          {f.recommended_remediation}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400 block mb-0.5">
+                                          Assessment Limitations
+                                        </span>
+                                        <div className="text-[11px] text-slate-500 italic">
+                                          {f.limitations}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

@@ -20,6 +20,7 @@ from backend.app.services.feeds.openphish import openphish_client
 from backend.app.services.feeds.google_safe_browsing import google_safe_browsing_client
 from backend.app.services.feeds.phishtank import phishtank_client
 from backend.app.services.feeds.virustotal import virustotal_client
+from backend.app.services.scanner.security_assessor import website_security_assessor
 from backend.app.services.scanner.risk_engine import risk_engine
 from backend.app.services.ai.gemini_explainer import gemini_explainer
 
@@ -161,6 +162,13 @@ async def scan_url(request: URLScanRequest):
             detail=f"Investigation engine failure: {str(e)}"
         )
 
+    # Step 3b: Safe, passive website security assessment (headers, redirects, mixed content, software security)
+    website_sec_res = website_security_assessor.assess(
+        target_url=canonical_url,
+        http_data=http_res,
+        ssl_data=ssl_res,
+    )
+
     # Step 4: Deterministic Evidence-Based Risk Evaluation
     evaluation = risk_engine.evaluate(
         target_url=canonical_url,
@@ -175,6 +183,7 @@ async def scan_url(request: URLScanRequest):
         simulation_data=sim_res,
         phishtank_data=phishtank_res,
         virustotal_data=vt_res,
+        website_security_data=website_sec_res,
     )
 
     verdict = evaluation["verdict"]
@@ -239,6 +248,7 @@ async def scan_url(request: URLScanRequest):
         phishtank_match=phishtank_res,
         virustotal_match=vt_res,
         simulation_check=sim_res,
+        website_security=website_sec_res,
         evidence_timeline=evaluation["evidence_timeline"],
         evidence_hash=evaluation["evidence_hash"],
         blockchain_ready=True,

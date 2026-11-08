@@ -50,6 +50,60 @@ export interface ScanResult {
     malicious_count?: number;
     total_engines?: number;
   };
+  website_security?: {
+    grade?: string;
+    https_enforced?: boolean;
+    http_to_https_redirect?: boolean;
+    headers_evaluated?: Record<string, {
+      header_name: string;
+      present: boolean;
+      value?: string;
+      status: string;
+      summary: string;
+    }>;
+    redirect_analysis?: {
+      initial_url: string;
+      final_url: string;
+      redirect_count: number;
+      has_redirects: boolean;
+      has_cross_domain: boolean;
+      has_protocol_downgrade: boolean;
+      chain?: Array<{
+        hop_number: number;
+        url: string;
+        domain: string;
+        scheme: string;
+        is_cross_domain: boolean;
+        is_downgrade: boolean;
+      }>;
+      summary: string;
+    };
+    mixed_content?: {
+      has_mixed_content: boolean;
+      active_count: number;
+      passive_count: number;
+      sample_active?: string[];
+      sample_passive?: string[];
+      summary: string;
+    };
+    software_security?: {
+      is_version_disclosed: boolean;
+      disclosed_banners?: Array<{ source: string; banner: string }>;
+      known_vulnerabilities?: Array<any>;
+      summary: string;
+    };
+    findings?: Array<{
+      id: string;
+      title: string;
+      severity: string;
+      technical_evidence?: Record<string, any>;
+      potential_impact: string;
+      recommended_remediation: string;
+      limitations: string;
+    }>;
+    findings_count?: number;
+    consumer_explanation?: string;
+  };
   ai_analysis?: {
     executive_summary?: string;
     brand_impersonation_target?: string;

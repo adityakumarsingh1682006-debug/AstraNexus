@@ -28,12 +28,16 @@ class HTTPInspector:
             "status_code": None,
             "redirect_count": 0,
             "redirect_chain": [],
+            "redirect_hops": [],
+            "headers": {},
             "server_header": None,
             "content_type": None,
             "page_title": None,
             "meta_description": None,
+            "meta_generator": None,
             "has_password_form": False,
             "has_external_action": False,
+            "mixed_content": {"active_items": [], "passive_items": []},
             "latency_ms": 0.0,
             "error": None,
         }
@@ -80,6 +84,13 @@ class HTTPInspector:
                             parsed_curr = urlparse(curr_url)
                             next_url = f"{parsed_curr.scheme}://{parsed_curr.netloc}{next_url}"
 
+                        results["redirect_hops"].append({
+                            "hop": hops,
+                            "url": curr_url,
+                            "status_code": response.status_code,
+                            "location": next_url,
+                        })
+
                         # Validate next hop against SSRF before following!
                         try:
                             next_url, _, _ = validate_target_url(next_url)
@@ -96,8 +107,16 @@ class HTTPInspector:
                     # Final response reached
                     results["status_code"] = response.status_code
                     results["final_url"] = str(response.url)
+                    results["headers"] = {k.lower(): v for k, v in response.headers.items()}
                     results["server_header"] = response.headers.get("server")
                     results["content_type"] = response.headers.get("content-type")
+
+                    results["redirect_hops"].append({
+                        "hop": hops,
+                        "url": str(response.url),
+                        "status_code": response.status_code,
+                        "location": None,
+                    })
 
                     # Read body with maximum size guard
                     content_bytes = response.content
@@ -118,6 +137,11 @@ class HTTPInspector:
                         if meta_desc and meta_desc.get("content"):
                             results["meta_description"] = str(meta_desc["content"]).strip()[:300]
 
+                        # Check meta generator
+                        meta_gen = soup.find("meta", attrs={"name": lambda n: bool(n and n.lower() == "generator")})
+                        if meta_gen and meta_gen.get("content"):
+                            results["meta_generator"] = str(meta_gen["content"]).strip()[:100]
+
                         # Check for credential harvesting forms
                         password_inputs = soup.find_all("input", attrs={"type": "password"})
                         if password_inputs:
@@ -133,6 +157,57 @@ class HTTPInspector:
                                 if parsed_action.netloc != parsed_curr.netloc:
                                     results["has_external_action"] = True
                                     break
+
+                        # Check for Mixed Content if final URL is HTTPS
+                        if curr_url.lower().startswith("https://"):
+                            active_items = []
+                            passive_items = []
+
+                            # Active mixed content: scripts, stylesheets, iframes, objects, embeds, form actions
+                            for tag in soup.find_all("script", src=True):
+                                src = tag["src"].strip()
+                                if src.lower().startswith("http://"):
+                                    active_items.append(src)
+
+                            for tag in soup.find_all("link", href=True):
+                                rel = tag.get("rel") or []
+                                if isinstance(rel, str):
+                                    rel = [rel]
+                                if any("stylesheet" in r.lower() for r in rel):
+                                    href = tag["href"].strip()
+                                    if href.lower().startswith("http://"):
+                                        active_items.append(href)
+
+                            for tag in soup.find_all("iframe", src=True):
+                                src = tag["src"].strip()
+                                if src.lower().startswith("http://"):
+                                    active_items.append(src)
+
+                            for tag in soup.find_all(["object", "embed"]):
+                                u = tag.get("data") or tag.get("src") or ""
+                                if u.strip().lower().startswith("http://"):
+                                    active_items.append(u.strip())
+
+                            for tag in soup.find_all("form", action=True):
+                                act = tag["action"].strip()
+                                if act.lower().startswith("http://"):
+                                    active_items.append(act)
+
+                            # Passive mixed content: images, audio, video
+                            for tag in soup.find_all("img", src=True):
+                                src = tag["src"].strip()
+                                if src.lower().startswith("http://"):
+                                    passive_items.append(src)
+
+                            for tag in soup.find_all(["audio", "video", "source"], src=True):
+                                src = tag["src"].strip()
+                                if src.lower().startswith("http://"):
+                                    passive_items.append(src)
+
+                            results["mixed_content"] = {
+                                "active_items": list(dict.fromkeys(active_items))[:10],
+                                "passive_items": list(dict.fromkeys(passive_items))[:10],
+                            }
                     break
 
         except Exception as e:

@@ -34,6 +34,7 @@ class RiskEngine:
         simulation_data: Optional[Dict[str, Any]] = None,
         phishtank_data: Optional[Dict[str, Any]] = None,
         virustotal_data: Optional[Dict[str, Any]] = None,
+        website_security_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         risk_score = 0
         threat_types: List[str] = []
@@ -48,6 +49,7 @@ class RiskEngine:
         sim_data = simulation_data or {}
         pt_data = phishtank_data or {}
         vt_data = virustotal_data or {}
+        sec_data = website_security_data or {}
 
         # Extract basic host/domain attributes
         registered_domain = typosquat_data.get("registered_domain") or domain
@@ -119,7 +121,7 @@ class RiskEngine:
                 summary="Matches official brand property.",
                 details={"brand": impersonated_brand},
             )
-            self._fill_telemetry_checks(checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data, vt_data)
+            self._fill_telemetry_checks(checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data, vt_data, sec_data)
 
             headline = f"Official verified website of {impersonated_brand}. Safe to proceed."
             advice = [
@@ -755,6 +757,57 @@ class RiskEngine:
                 )
 
         # -------------------------------------------------------------
+        # 8b. Website Security Hygiene (Passive Security Assessment)
+        # -------------------------------------------------------------
+        sec_findings = sec_data.get("findings", [])
+        sec_grade = sec_data.get("grade", "N/A")
+
+        if not has_dns_resolution:
+            checks["website_security"] = CheckItem(
+                name="Website Security Details",
+                status=CheckStatusEnum.UNAVAILABLE,
+                summary="Website security checks unavailable because hostname could not be reached.",
+                details={"reason": "DNS resolution failed"},
+            )
+        else:
+            has_crit_sec = any(f.get("severity") in ("CRITICAL", "HIGH") for f in sec_findings)
+            checks["website_security"] = CheckItem(
+                name="Website Security Details",
+                status=CheckStatusEnum.SUSPICIOUS_FINDING if has_crit_sec else CheckStatusEnum.COMPLETED,
+                summary=f"Security Grade: {sec_grade} ({len(sec_findings)} finding(s) evaluated).",
+                details=sec_data,
+            )
+
+        # Incorporate website security findings with careful consumer calibration:
+        # Never confuse missing security headers with proof that a website is fraudulent!
+        for f in sec_findings:
+            f_sev = f.get("severity", "LOW")
+            if f_sev in ("CRITICAL", "HIGH"):
+                c_level = ConcernLevel.HIGH_CONCERN
+                if f.get("id") == "sec-mixed-content-active":
+                    risk_score += 15
+                    threat_types.append("Active Mixed Content")
+                elif f.get("id") == "sec-redirect-downgrade":
+                    risk_score += 15
+                    threat_types.append("Protocol Downgrade Redirection")
+            elif f_sev == "MEDIUM":
+                c_level = ConcernLevel.LOW_CONCERN
+            else:
+                c_level = ConcernLevel.INFORMATION
+
+            concerns.append(
+                Finding(
+                    id=f.get("id", "website-sec-finding"),
+                    category="WEBSITE_SECURITY",
+                    title=f.get("title", "Website Security Finding"),
+                    concern_level=c_level,
+                    plain_explanation=f.get("potential_impact", "") + " " + f.get("recommended_remediation", ""),
+                    technical_evidence=f.get("technical_evidence"),
+                    check_status=CheckStatusEnum.SUSPICIOUS_FINDING if f_sev in ("CRITICAL", "HIGH") else CheckStatusEnum.COMPLETED,
+                )
+            )
+
+        # -------------------------------------------------------------
         # 9. Deterministic Verdict Derivation
         # -------------------------------------------------------------
         final_score = min(100, max(0, risk_score))
@@ -917,9 +970,10 @@ class RiskEngine:
             recommendations=recommendations,
         )
 
-    def _fill_telemetry_checks(self, checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data=None, vt_data=None):
+    def _fill_telemetry_checks(self, checks, dns_data, ssl_data, http_data, urlhaus_data, openphish_data, gsb_data, sim_data, pt_data=None, vt_data=None, sec_data=None):
         pt_data = pt_data or {}
         vt_data = vt_data or {}
+        sec_data = sec_data or {}
         if dns_data.get("a_records"):
             checks["dns_resolution"] = CheckItem(
                 name="DNS Resolution",
@@ -992,6 +1046,12 @@ class RiskEngine:
             status=CheckStatusEnum.NO_MATCH_FOUND if vt_data.get("match_status") == "NO_MATCH_FOUND" else CheckStatusEnum.UNAVAILABLE,
             summary="Clean: Zero detections on VirusTotal." if vt_data.get("match_status") == "NO_MATCH_FOUND" else "Unavailable: VirusTotal API key not configured.",
             details={},
+        )
+        checks["website_security"] = CheckItem(
+            name="Website Security Details",
+            status=CheckStatusEnum.COMPLETED,
+            summary=f"Security Grade: {sec_data.get('grade', 'A')} — Verified brand security configuration active.",
+            details=sec_data,
         )
 
     def _build_result_package(

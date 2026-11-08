@@ -60,6 +60,7 @@ class TechnicalEvidence(BaseModel):
     phishtank_match: Optional[Dict[str, Any]] = None
     virustotal_match: Optional[Dict[str, Any]] = None
     simulation_check: Optional[Dict[str, Any]] = None
+    website_security: Optional[Dict[str, Any]] = None
     evidence_timeline: List[Dict[str, Any]] = Field(default_factory=list)
     evidence_hash: str
     blockchain_ready: bool = True
