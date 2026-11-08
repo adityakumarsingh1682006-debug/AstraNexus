@@ -242,7 +242,7 @@ async def scan_url(request: URLScanRequest):
 
     # Generate canonical commitment and register on-chain if notary is available
     report_id = f"scan-{evaluation['evidence_hash'][:16]}"
-    _, commitment_hex, _, _ = compute_report_commitment(
+    _, commitment_hex, canonical_payload, _ = compute_report_commitment(
         report_id=report_id,
         target_type="URL",
         threat_category=threat_types[0] if threat_types else "BENIGN",
@@ -276,6 +276,16 @@ async def scan_url(request: URLScanRequest):
             "commitment_hash": commitment_hex,
         }
 
+    verifiable_certificate = {
+        "report_id": report_id,
+        "canonical_payload": canonical_payload,
+        "commitment_hash": commitment_hex,
+        "network": blockchain_res.get("network") if blockchain_res else "EVM Localnet (Chain 31337)",
+        "contract_address": blockchain_res.get("contract_address") if blockchain_res else settings.ASTRA_REGISTRY_CONTRACT_ADDRESS,
+        "tx_hash": blockchain_res.get("tx_hash") if blockchain_res else None,
+        "exported_at": str(evaluation["evidence_timeline"][-1]["timestamp"]) if evaluation.get("evidence_timeline") else None,
+    }
+
     technical_evidence = TechnicalEvidence(
         dns_records=dns_res,
         ssl_certificate=ssl_res,
@@ -293,6 +303,7 @@ async def scan_url(request: URLScanRequest):
         blockchain_ready=True,
         blockchain_registration=blockchain_res,
         commitment_hash=commitment_hex,
+        verifiable_export=verifiable_certificate,
     )
 
     return URLScanResponse(

@@ -158,16 +158,19 @@ THREAT_REGISTRY_ABI = [
 ]
 
 
+_DEFAULT = object()
+
+
 class ThreatRegistryClient:
     def __init__(
         self,
-        rpc_url: Optional[str] = None,
-        contract_address: Optional[str] = None,
-        private_key: Optional[str] = None,
+        rpc_url: Any = _DEFAULT,
+        contract_address: Any = _DEFAULT,
+        private_key: Any = _DEFAULT,
     ):
-        self.rpc_url = rpc_url or settings.EVM_RPC_URL
-        self.contract_address = contract_address or settings.ASTRA_REGISTRY_CONTRACT_ADDRESS
-        self.private_key = private_key or settings.NOTARY_SIGNER_PRIVATE_KEY
+        self.rpc_url = settings.EVM_RPC_URL if rpc_url is _DEFAULT else rpc_url
+        self.contract_address = settings.ASTRA_REGISTRY_CONTRACT_ADDRESS if contract_address is _DEFAULT else contract_address
+        self.private_key = settings.NOTARY_SIGNER_PRIVATE_KEY if private_key is _DEFAULT else private_key
 
         self._web3: Optional[Web3] = None
         self._contract = None
@@ -354,6 +357,111 @@ class ThreatRegistryClient:
                 "tx_hash": None,
                 "report_id": report_id,
                 "commitment_hash": commitment_hash,
+            }
+
+    def revise_report(
+        self,
+        report_id: str,
+        new_commitment_hash: str,
+    ) -> Dict[str, Any]:
+        """Submits a revision for an existing report commitment on-chain."""
+        if not self.rpc_url or not self.contract_address or not self.private_key:
+            return {
+                "status": BlockchainRegistrationStatus.NOT_CONFIGURED.value,
+                "is_registered": False,
+                "message": "Blockchain notary configuration missing.",
+                "tx_hash": None,
+                "report_id": report_id,
+                "commitment_hash": new_commitment_hash,
+            }
+
+        w3 = self._get_web3()
+        if not w3 or not self.is_connected():
+            return {
+                "status": BlockchainRegistrationStatus.RPC_UNAVAILABLE.value,
+                "is_registered": False,
+                "message": "Unable to connect to blockchain node.",
+                "tx_hash": None,
+                "report_id": report_id,
+                "commitment_hash": new_commitment_hash,
+            }
+
+        contract = self._get_contract()
+        if not contract:
+            return {
+                "status": BlockchainRegistrationStatus.FAILED.value,
+                "is_registered": False,
+                "message": "Contract instance unavailable.",
+                "tx_hash": None,
+                "report_id": report_id,
+                "commitment_hash": new_commitment_hash,
+            }
+
+        try:
+            if report_id.startswith("0x") and len(report_id) == 66:
+                report_id_bytes = bytes.fromhex(report_id[2:])
+            else:
+                report_id_bytes = Web3.keccak(text=report_id)
+
+            clean_hash = new_commitment_hash[2:] if new_commitment_hash.startswith("0x") else new_commitment_hash
+            commitment_bytes = bytes.fromhex(clean_hash)
+
+            account = Account.from_key(self.private_key)
+            sender_address = account.address
+            nonce = w3.eth.get_transaction_count(sender_address)
+            gas_price = w3.eth.gas_price
+
+            tx_func = contract.functions.reviseReport(report_id_bytes, commitment_bytes)
+            try:
+                estimated_gas = tx_func.estimate_gas({"from": sender_address})
+            except Exception:
+                estimated_gas = 150000
+
+            tx = tx_func.build_transaction({
+                "from": sender_address,
+                "nonce": nonce,
+                "gas": int(estimated_gas * 1.2),
+                "gasPrice": gas_price,
+            })
+
+            signed_tx = w3.eth.account.sign_transaction(tx, private_key=self.private_key)
+            tx_hash_bytes = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash_hex = tx_hash_bytes.hex()
+            if not tx_hash_hex.startswith("0x"):
+                tx_hash_hex = "0x" + tx_hash_hex
+
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash_bytes, timeout=20)
+            if receipt.status == 1:
+                return {
+                    "status": BlockchainRegistrationStatus.CONFIRMED.value,
+                    "is_registered": True,
+                    "message": "Report revision successfully written to blockchain.",
+                    "tx_hash": tx_hash_hex,
+                    "block_number": receipt.blockNumber,
+                    "gas_used": receipt.gasUsed,
+                    "report_id": report_id,
+                    "commitment_hash": new_commitment_hash,
+                    "network": f"Chain ID {w3.eth.chain_id}",
+                    "contract_address": self.contract_address,
+                }
+            else:
+                return {
+                    "status": BlockchainRegistrationStatus.FAILED.value,
+                    "is_registered": False,
+                    "message": "Revision transaction reverted on-chain.",
+                    "tx_hash": tx_hash_hex,
+                    "report_id": report_id,
+                    "commitment_hash": new_commitment_hash,
+                }
+        except Exception as e:
+            logger.error(f"Failed to broadcast revision transaction: {e}")
+            return {
+                "status": BlockchainRegistrationStatus.FAILED.value,
+                "is_registered": False,
+                "message": f"Revision failed: {str(e)}",
+                "tx_hash": None,
+                "report_id": report_id,
+                "commitment_hash": new_commitment_hash,
             }
 
     def verify_report(self, report_id: str, expected_commitment_hash: str) -> Dict[str, Any]:

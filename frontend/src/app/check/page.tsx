@@ -27,6 +27,7 @@ import {
   ShieldAlert,
   FlaskConical,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +114,37 @@ function CheckContent() {
     } finally {
       setIsVerifyingOnChain(false);
     }
+  };
+
+  const handleDownloadExport = () => {
+    if (!urlScanResult) return;
+    const exportData = urlScanResult.technical_evidence?.verifiable_export || {
+      report_id:
+        urlScanResult.technical_evidence?.blockchain_registration?.report_id ||
+        `scan-${urlScanResult.technical_evidence?.evidence_hash?.slice(0, 16) || "unknown"}`,
+      commitment_hash: urlScanResult.technical_evidence?.blockchain_registration?.commitment_hash,
+      network:
+        urlScanResult.technical_evidence?.blockchain_registration?.network || "EVM Localnet (Chain 31337)",
+      contract_address:
+        urlScanResult.technical_evidence?.blockchain_registration?.contract_address ||
+        "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      canonical_payload: {
+        canonical_url: urlScanResult.url,
+        risk_score: urlScanResult.risk_score,
+        risk_level: urlScanResult.risk_level,
+        timestamp: urlScanResult.scanned_at || new Date().toISOString(),
+        threat_found: urlScanResult.risk_level === "DANGER" || urlScanResult.risk_level === "SUSPICIOUS",
+      },
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `astranexus-report-${exportData.report_id || "export"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const toggleSecurityFinding = (id: string) => {
@@ -1293,32 +1325,55 @@ function CheckContent() {
                       </div>
                     </div>
 
-                    {urlScanResult.technical_evidence.blockchain_registration.commitment_hash && (
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                      {urlScanResult.technical_evidence.blockchain_registration.commitment_hash && (
+                        <button
+                          type="button"
+                          disabled={isVerifyingOnChain}
+                          onClick={() =>
+                            handleVerifyOnChain(
+                              urlScanResult.technical_evidence.blockchain_registration.report_id ||
+                                `scan-${urlScanResult.technical_evidence.evidence_hash.slice(0, 16)}`,
+                              urlScanResult.technical_evidence.blockchain_registration.commitment_hash
+                            )
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-60 shadow-sm"
+                        >
+                          {isVerifyingOnChain ? (
+                            <>
+                              <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Verifying On-Chain...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>Verify On-Chain Integrity</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        disabled={isVerifyingOnChain}
-                        onClick={() =>
-                          handleVerifyOnChain(
-                            urlScanResult.technical_evidence.blockchain_registration.report_id ||
-                              `scan-${urlScanResult.technical_evidence.evidence_hash.slice(0, 16)}`,
-                            urlScanResult.technical_evidence.blockchain_registration.commitment_hash
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-60 self-start sm:self-auto shadow-sm"
+                        onClick={handleDownloadExport}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors shadow-sm border border-slate-200 dark:border-slate-700"
+                        title="Download canonical verifiable certificate JSON for offline or external audits"
                       >
-                        {isVerifyingOnChain ? (
-                          <>
-                            <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Verifying On-Chain...</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Verify On-Chain Integrity</span>
-                          </>
-                        )}
+                        <Download className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Export Certificate (.json)</span>
                       </button>
-                    )}
+
+                      <a
+                        href="/verify"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 transition-colors shadow-sm border border-indigo-200/60 dark:border-indigo-800/60"
+                        title="Open independent browser verifier that queries EVM nodes directly without AstraNexus backend"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Standalone Verifier</span>
+                      </a>
+                    </div>
                   </div>
 
                   {/* Verification Results Banner if queried */}

@@ -66,6 +66,7 @@ class TechnicalEvidence(BaseModel):
     blockchain_ready: bool = True
     blockchain_registration: Optional[Dict[str, Any]] = None
     commitment_hash: Optional[str] = None
+    verifiable_export: Optional[Dict[str, Any]] = None
 
 
 class URLScanResponse(BaseModel):
