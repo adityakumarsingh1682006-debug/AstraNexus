@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from backend.app.schemas.correlation import ThreatCorrelationSummary, RelatedArticleItem
 
 
 class MessageScanRequest(BaseModel):
@@ -30,5 +31,11 @@ class MessageScanResponse(BaseModel):
     extracted_links: List[str] = Field(default_factory=list)
     extracted_phones: List[str] = Field(default_factory=list)
     extracted_amounts: List[str] = Field(default_factory=list)
+    extracted_domains: List[str] = Field(default_factory=list)
+    extracted_emails: List[str] = Field(default_factory=list)
+    extracted_payment_indicators: List[str] = Field(default_factory=list)
+    security_warnings: List[str] = Field(default_factory=list)
+    correlation: Optional[ThreatCorrelationSummary] = None
+    related_articles: List[RelatedArticleItem] = Field(default_factory=list)
     ai_explanation: Optional[Dict[str, Any]] = None
     analyzed_at: datetime = Field(default_factory=datetime.utcnow)

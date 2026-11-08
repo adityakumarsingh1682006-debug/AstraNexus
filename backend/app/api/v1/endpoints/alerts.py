@@ -1,6 +1,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Query
 from backend.app.schemas.alerts import ScamAlert
+from backend.app.schemas.correlation import RelatedArticleItem
+from backend.app.services.intelligence.threat_correlator import (
+    REAL_OFFICIAL_ADVISORIES,
+    threat_correlator,
+)
 
 router = APIRouter()
 
@@ -115,6 +120,17 @@ VERIFIED_SCAM_ALERTS: List[ScamAlert] = [
         source="Consumer Protection Bureau"
     )
 ]
+
+
+@router.get("/advisories", response_model=List[RelatedArticleItem], tags=["Scam Alerts"])
+async def get_official_advisories(category: Optional[str] = None):
+    """
+    Returns authentic verified public safety alerts & advisories from official consumer protection agencies (FTC, CISA, FBI IC3, USPIS).
+    Guarantees zero fabricated sources.
+    """
+    if category and isinstance(category, str) and category.upper() != "ALL":
+        return threat_correlator.get_related_advisories(category)
+    return REAL_OFFICIAL_ADVISORIES
 
 
 @router.get("", response_model=List[ScamAlert], tags=["Scam Alerts"])

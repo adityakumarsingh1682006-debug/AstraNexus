@@ -61,22 +61,19 @@ def test_case_4_message_containing_no_urls():
     assert res.risk_score >= 30
 
 
-def test_case_5_empty_message_validation():
+@pytest.mark.asyncio
+async def test_case_5_empty_message_validation():
     """Case 5: Empty message raises HTTP 400 Bad Request."""
-    loop = asyncio.new_event_loop()
-    try:
-        req_empty = MessageScanRequest(message_text="")
-        with pytest.raises(HTTPException) as exc_info:
-            loop.run_until_complete(analyze_message(req_empty))
-        assert exc_info.value.status_code == 400
-        assert "empty" in exc_info.value.detail.lower()
+    req_empty = MessageScanRequest(message_text="")
+    with pytest.raises(HTTPException) as exc_info:
+        await analyze_message(req_empty)
+    assert exc_info.value.status_code == 400
+    assert "empty" in exc_info.value.detail.lower()
 
-        req_spaces = MessageScanRequest(message_text="   \n\t  ")
-        with pytest.raises(HTTPException) as exc_info2:
-            loop.run_until_complete(analyze_message(req_spaces))
-        assert exc_info2.value.status_code == 400
-    finally:
-        loop.close()
+    req_spaces = MessageScanRequest(message_text="   \n\t  ")
+    with pytest.raises(HTTPException) as exc_info2:
+        await analyze_message(req_spaces)
+    assert exc_info2.value.status_code == 400
 
 
 def test_case_6_pydantic_schema_resilience_to_incomplete_data():
@@ -96,46 +93,37 @@ def test_case_6_pydantic_schema_resilience_to_incomplete_data():
     assert minimal_resp.ai_explanation is None
 
 
-def test_case_7_gemini_api_unavailable_fallback():
+@pytest.mark.asyncio
+async def test_case_7_gemini_api_unavailable_fallback():
     """Case 7: Gemini API unavailable falls back cleanly to deterministic explanation."""
-    loop = asyncio.new_event_loop()
-    try:
-        # Explainer with no API key uses deterministic heuristic fallback
-        exp = loop.run_until_complete(
-            gemini_explainer.explain_message_verdict(
-                message_text="URGENT: Verify your account immediately",
-                verdict="LIKELY_SCAM",
-                risk_score=75,
-                scam_category="Banking & Financial Fraud",
-                detected_tactics=["Artificial Urgency", "Impersonating Bank"],
-                extracted_links=["http://phish.example.com"],
-            )
-        )
-        assert isinstance(exp, dict)
-        assert "headline" in exp and exp["headline"]
-        assert "summary" in exp and exp["summary"]
-        assert "what_to_do" in exp and isinstance(exp["what_to_do"], list)
-        assert len(exp["what_to_do"]) > 0
-        assert "AstraNexus Deterministic Safety Rules" in exp["source"]
-    finally:
-        loop.close()
+    exp = await gemini_explainer.explain_message_verdict(
+        message_text="URGENT: Verify your account immediately",
+        verdict="LIKELY_SCAM",
+        risk_score=75,
+        scam_category="Banking & Financial Fraud",
+        detected_tactics=["Artificial Urgency", "Impersonating Bank"],
+        extracted_links=["http://phish.example.com"],
+    )
+    assert isinstance(exp, dict)
+    assert "headline" in exp and exp["headline"]
+    assert "summary" in exp and exp["summary"]
+    assert "what_to_do" in exp and isinstance(exp["what_to_do"], list)
+    assert len(exp["what_to_do"]) > 0
+    assert "AstraNexus Deterministic Safety Rules" in exp["source"]
 
 
-def test_endpoint_end_to_end_analyze():
+@pytest.mark.asyncio
+async def test_endpoint_end_to_end_analyze():
     """End-to-end integration test of analyze_message endpoint."""
-    loop = asyncio.new_event_loop()
-    try:
-        req = MessageScanRequest(
-            message_text="USPS Notice: Package delivery failed. Pay redelivery fee of $2.50 at http://usps-redelivery.xyz",
-            channel_type="SMS",
-        )
-        res = loop.run_until_complete(analyze_message(req))
-        assert res.verdict == "LIKELY_SCAM"
-        assert res.risk_score >= 60
-        assert len(res.consumer_advice) > 0
-        assert len(res.manipulation_tactics) > 0
-        assert len(res.extracted_links) == 1
-        assert res.ai_explanation is not None
-        assert isinstance(res.ai_explanation.get("what_to_do"), list)
-    finally:
-        loop.close()
+    req = MessageScanRequest(
+        message_text="USPS Notice: Package delivery failed. Pay redelivery fee of $2.50 at http://usps-redelivery.xyz",
+        channel_type="SMS",
+    )
+    res = await analyze_message(req)
+    assert res.verdict == "LIKELY_SCAM"
+    assert res.risk_score >= 60
+    assert len(res.consumer_advice) > 0
+    assert len(res.manipulation_tactics) > 0
+    assert len(res.extracted_links) == 1
+    assert res.ai_explanation is not None
+    assert isinstance(res.ai_explanation.get("what_to_do"), list)

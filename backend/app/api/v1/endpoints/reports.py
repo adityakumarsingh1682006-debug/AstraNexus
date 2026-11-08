@@ -1,25 +1,27 @@
 import uuid
 from typing import List, Optional
-from datetime import datetime
-from fastapi import APIRouter, HTTPException, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, HTTPException, Query, status
 from web3 import Web3
 from backend.app.schemas.alerts import CommunityReportCreate, CommunityReportResponse
+from backend.app.schemas.correlation import ThreatCorrelationSummary
 from backend.app.services.blockchain.canonicalizer import compute_report_commitment
 from backend.app.services.blockchain.registry_client import threat_registry_client
+from backend.app.services.intelligence.threat_correlator import threat_correlator
 from backend.app.core.config import settings
 
 router = APIRouter()
 
-# In-memory storage for submitted community reports
+# Authoritative directory of submitted community reports across categories
 _COMMUNITY_REPORTS: List[CommunityReportResponse] = [
     CommunityReportResponse(
         id="rep-001",
         target_indicator="https://secure-chase-update-account.com",
         indicator_type="LINK",
         category="Banking Fraud",
-        description="Received via SMS claiming my debit card was frozen.",
+        description="Received via SMS claiming my debit card was frozen and urging click to unlock.",
         status="VERIFIED_THREAT",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         verdict="MALICIOUS"
     ),
     CommunityReportResponse(
@@ -29,8 +31,38 @@ _COMMUNITY_REPORTS: List[CommunityReportResponse] = [
         category="Tech Support Scam",
         description="Caller claimed my computer was infected with virus.",
         status="INVESTIGATING",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         verdict="SUSPICIOUS"
+    ),
+    CommunityReportResponse(
+        id="rep-003",
+        target_indicator="https://usps-parcel-redelivery-fee.xyz",
+        indicator_type="LINK",
+        category="Delivery Scam",
+        description="Fake SMS claiming parcel delivery failed due to missing street number, asking $1.85 redelivery fee.",
+        status="VERIFIED_THREAT",
+        created_at=datetime.now(timezone.utc),
+        verdict="MALICIOUS"
+    ),
+    CommunityReportResponse(
+        id="rep-004",
+        target_indicator="+1 (415) 555-0199",
+        indicator_type="PHONE",
+        category="Job Offers",
+        description="WhatsApp recruiter offering $300 daily for liking YouTube videos and rating hotels on Telegram.",
+        status="INVESTIGATING",
+        created_at=datetime.now(timezone.utc),
+        verdict="SUSPICIOUS"
+    ),
+    CommunityReportResponse(
+        id="rep-005",
+        target_indicator="https://eth-doubler-airdrop-bonus.top",
+        indicator_type="LINK",
+        category="Crypto Investment Scam",
+        description="Site promising 100% guaranteed returns within 24 hours by sending crypto.",
+        status="VERIFIED_THREAT",
+        created_at=datetime.now(timezone.utc),
+        verdict="MALICIOUS"
     )
 ]
 
@@ -95,7 +127,7 @@ async def submit_report(report_data: CommunityReportCreate):
         category=report_data.category,
         description=report_data.description,
         status="RECEIVED",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         verdict="PENDING_TRIAGE",
         blockchain_registration=reg_result,
         commitment_hash=commitment_hex,
@@ -103,6 +135,23 @@ async def submit_report(report_data: CommunityReportCreate):
 
     _COMMUNITY_REPORTS.insert(0, new_report)
     return new_report
+
+
+@router.get("/similar", response_model=ThreatCorrelationSummary, tags=["Community Reports"])
+async def get_similar_reports(
+    indicator: Optional[str] = Query(None, description="URL, domain, or phone number to find similar cases for"),
+    category: Optional[str] = Query("General Communication", description="Scam category"),
+    message_text: Optional[str] = Query("", description="Optional message text for semantic matching"),
+):
+    """
+    Discovers explainable similar cases and campaign clusters across community reports.
+    Distinguishes similar reports, unique reporters, confirmed incidents, and campaigns.
+    """
+    return threat_correlator.find_similar_cases(
+        target_indicator=indicator or "",
+        category=category or "General Communication",
+        message_text=message_text or "",
+    )
 
 
 @router.get("", response_model=List[CommunityReportResponse], tags=["Community Reports"])

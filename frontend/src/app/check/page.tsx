@@ -28,6 +28,9 @@ import {
   FlaskConical,
   Sparkles,
   Download,
+  Network,
+  Newspaper,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +62,40 @@ export interface MessageAnalysisData {
   extracted_links: string[];
   extracted_phones: string[];
   extracted_amounts: string[];
+  extracted_domains?: string[];
+  extracted_emails?: string[];
+  extracted_payment_indicators?: string[];
+  security_warnings?: string[];
+  correlation?: {
+    similar_reports_count: number;
+    unique_reporters_count: number;
+    confirmed_incidents_count: number;
+    suspected_campaign_name?: string | null;
+    suspected_campaign_confidence: number;
+    similar_cases: Array<{
+      report_id: string;
+      target_indicator: string;
+      indicator_type: string;
+      category: string;
+      match_type: string;
+      confidence_score: number;
+      evidence_explanation: string;
+      status: string;
+      created_at: string;
+      verdict?: string;
+    }>;
+    attribution_disclaimer: string;
+  } | null;
+  related_articles?: Array<{
+    id: string;
+    title: string;
+    publisher: string;
+    published_date?: string | null;
+    original_source_url: string;
+    category: string;
+    relevance_explanation: string;
+    is_official_advisory: boolean;
+  }>;
   ai_explanation?: {
     source?: string;
     headline?: string;
@@ -284,6 +321,20 @@ function CheckContent() {
         extracted_amounts: Array.isArray(data.extracted_amounts)
           ? data.extracted_amounts.filter((a: any) => typeof a === "string" && a.trim())
           : [],
+        extracted_domains: Array.isArray(data.extracted_domains)
+          ? data.extracted_domains.filter((d: any) => typeof d === "string" && d.trim())
+          : [],
+        extracted_emails: Array.isArray(data.extracted_emails)
+          ? data.extracted_emails.filter((e: any) => typeof e === "string" && e.trim())
+          : [],
+        extracted_payment_indicators: Array.isArray(data.extracted_payment_indicators)
+          ? data.extracted_payment_indicators.filter((p: any) => typeof p === "string" && p.trim())
+          : [],
+        security_warnings: Array.isArray(data.security_warnings)
+          ? data.security_warnings.filter((w: any) => typeof w === "string" && w.trim())
+          : [],
+        correlation: data.correlation && typeof data.correlation === "object" ? data.correlation : null,
+        related_articles: Array.isArray(data.related_articles) ? data.related_articles : [],
         ai_explanation:
           data.ai_explanation && typeof data.ai_explanation === "object" ? data.ai_explanation : null,
         analyzed_at: data.analyzed_at || new Date().toISOString(),
@@ -1869,32 +1920,207 @@ function CheckContent() {
                 </div>
               )}
 
-              {/* Extracted Phone Numbers or Amounts */}
+              {/* Security & Prompt Injection Warnings */}
+              {(messageResult.security_warnings || []).length > 0 && (
+                <div className="p-4 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50/80 dark:bg-rose-950/40 text-xs space-y-1.5 text-rose-900 dark:text-rose-200">
+                  <div className="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-300">
+                    <ShieldAlert className="w-4 h-4 shrink-0" />
+                    <span>Security & Prompt Injection Alert</span>
+                  </div>
+                  {(messageResult.security_warnings || []).map((warn, wIdx) => (
+                    <p key={wIdx} className="leading-relaxed">{warn}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Extracted Message Telemetry */}
               {((messageResult.extracted_phones || []).length > 0 ||
-                (messageResult.extracted_amounts || []).length > 0) && (
-                <div className="consumer-card p-5 space-y-2 text-xs">
-                  <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
-                    Extracted Message Telemetry
+                (messageResult.extracted_amounts || []).length > 0 ||
+                (messageResult.extracted_domains || []).length > 0 ||
+                (messageResult.extracted_emails || []).length > 0 ||
+                (messageResult.extracted_payment_indicators || []).length > 0) && (
+                <div className="consumer-card p-5 space-y-3 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] block">
+                    Extracted Message Indicators & Telemetry
                   </span>
-                  <div className="flex flex-wrap gap-4 pt-1 text-slate-700 dark:text-slate-300">
-                    {(messageResult.extracted_phones || []).length > 0 && (
-                      <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-slate-700 dark:text-slate-300">
+                    {(messageResult.extracted_domains || []).length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
                         <strong className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">
-                          Contact Phone Numbers:
+                          Extracted Domains:
                         </strong>
-                        <span className="font-mono">{messageResult.extracted_phones.join(", ")}</span>
-                      </div>
-                    )}
-                    {(messageResult.extracted_amounts || []).length > 0 && (
-                      <div>
-                        <strong className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">
-                          Amounts Demanded / Claimed:
-                        </strong>
-                        <span className="font-mono text-rose-600 dark:text-rose-400 font-semibold">
-                          {messageResult.extracted_amounts.join(", ")}
+                        <span className="font-mono text-purple-600 dark:text-purple-400 break-all">
+                          {messageResult.extracted_domains?.join(", ")}
                         </span>
                       </div>
                     )}
+                    {(messageResult.extracted_emails || []).length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                        <strong className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">
+                          Sender / Contact Emails:
+                        </strong>
+                        <span className="font-mono break-all">{messageResult.extracted_emails?.join(", ")}</span>
+                      </div>
+                    )}
+                    {(messageResult.extracted_phones || []).length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                        <strong className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">
+                          Phone Numbers:
+                        </strong>
+                        <span className="font-mono">{messageResult.extracted_phones?.join(", ")}</span>
+                      </div>
+                    )}
+                    {(messageResult.extracted_payment_indicators || []).length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 sm:col-span-2">
+                        <strong className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">
+                          Payment Demands & Methods:
+                        </strong>
+                        <span className="font-mono text-rose-600 dark:text-rose-400 font-semibold break-all">
+                          {messageResult.extracted_payment_indicators?.join(", ")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Threat Correlation & Similar Community Incidents */}
+              {messageResult.correlation && (
+                <div className="consumer-card p-6 space-y-4 border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/20 dark:bg-indigo-950/10">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Network className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                        Community Threat Correlation & Similar Cases
+                      </h3>
+                    </div>
+                    {messageResult.correlation.suspected_campaign_name && (
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
+                        {Math.round(messageResult.correlation.suspected_campaign_confidence * 100)}% Cluster Match
+                      </span>
+                    )}
+                  </div>
+
+                  {messageResult.correlation.suspected_campaign_name && (
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 text-xs">
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Suspected Threat Campaign:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">
+                        {messageResult.correlation.suspected_campaign_name}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Distinct Metrics Grid */}
+                  <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Similar Reports</span>
+                      <span className="text-lg font-bold text-slate-800 dark:text-slate-200">
+                        {messageResult.correlation.similar_reports_count}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Unique Reporters</span>
+                      <span className="text-lg font-bold text-slate-800 dark:text-slate-200">
+                        {messageResult.correlation.unique_reporters_count}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Confirmed Incidents</span>
+                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                        {messageResult.correlation.confirmed_incidents_count}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Similar Cases List */}
+                  {(messageResult.correlation.similar_cases || []).length > 0 && (
+                    <div className="space-y-2 pt-1 text-xs">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block text-[11px] uppercase">
+                        Correlated Incidents ({messageResult.correlation.similar_cases.length}):
+                      </span>
+                      <div className="space-y-2">
+                        {(messageResult.correlation.similar_cases || []).map((sim, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                  {sim.target_indicator}
+                                </span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                  {sim.match_type.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500">{sim.evidence_explanation}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                {Math.round(sim.confidence_score * 100)}% match
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                {sim.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Attribution Disclaimer (Part E) */}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 italic pt-1 border-t border-indigo-100 dark:border-indigo-900/40">
+                    {messageResult.correlation.attribution_disclaimer}
+                  </p>
+                </div>
+              )}
+
+              {/* Official Consumer Protection Advisories (Zero Fabrication) */}
+              {(messageResult.related_articles || []).length > 0 && (
+                <div className="consumer-card p-6 space-y-4 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                  <div className="flex items-center gap-2">
+                    <Newspaper className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                      Verified Consumer Advisories & Real Publications
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Authentic consumer protection alerts issued by government agencies and law enforcement regarding this scam pattern:
+                  </p>
+                  <div className="space-y-3">
+                    {(messageResult.related_articles || []).map((art, aIdx) => (
+                      <div
+                        key={aIdx}
+                        className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 space-y-1.5 text-xs"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                            {art.title}
+                          </h4>
+                          <span className="text-[10px] font-semibold text-slate-500 shrink-0">
+                            {art.publisher} {art.published_date && `• ${art.published_date}`}
+                          </span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                          {art.relevance_explanation}
+                        </p>
+                        <div className="pt-1 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            Verified Official Advisory
+                          </span>
+                          <a
+                            href={art.original_source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium"
+                          >
+                            <span>Read Official Source</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
