@@ -1,0 +1,16 @@
+{
+  "name": "AstraNexus Threat Intelligence",
+  "short_name": "AstraNexus",
+  "description": "AI-Powered Threat Detection, Forensics & Cryptographic Notary",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#04070D",
+  "theme_color": "#00F0FF",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

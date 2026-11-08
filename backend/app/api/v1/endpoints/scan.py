@@ -1,0 +1,236 @@
+import asyncio
+from fastapi import APIRouter, HTTPException, status
+from urllib.parse import urlparse
+
+from backend.app.schemas.scan import (
+    URLScanRequest,
+    URLScanResponse,
+    TechnicalEvidence,
+    RiskVerdict,
+)
+from backend.app.core.security import validate_target_url_syntax, resolve_and_verify_safe_ips
+from backend.app.core.exceptions import SSRFSecurityViolation
+from backend.app.services.scanner.dns_inspector import dns_inspector
+from backend.app.services.scanner.ssl_inspector import ssl_inspector
+from backend.app.services.scanner.typosquat import typosquat_detector
+from backend.app.services.scanner.http_inspector import http_inspector
+from backend.app.services.scanner.simulation_detector import simulation_detector
+from backend.app.services.feeds.urlhaus import urlhaus_client
+from backend.app.services.feeds.openphish import openphish_client
+from backend.app.services.feeds.google_safe_browsing import google_safe_browsing_client
+from backend.app.services.scanner.risk_engine import risk_engine
+from backend.app.services.ai.gemini_explainer import gemini_explainer
+
+router = APIRouter()
+
+
+@router.post("/url", response_model=URLScanResponse, tags=["URL Investigation"])
+async def scan_url(request: URLScanRequest):
+    """
+    Performs comprehensive, multi-layer digital safety investigation of a URL.
+    - SSRF pre-quarantine (blocks private IPs and invalid schemas)
+    - Resilient DNS inspection: DNS failure does NOT stop investigation
+    - PSL-aware domain extraction and brand impersonation detection
+    - Cybersecurity test suite & phishing simulation recognition
+    - Real-time Abuse.ch URLhaus, OpenPhish & Google Safe Browsing lookups
+    - Deterministic, evidence-based risk assessment (Rule 4 compliant)
+    - Structured findings with concern levels and dynamic guidance
+    - Optional cognitive explanation via Google Gemini
+    """
+    target = request.target_url.strip()
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target URL or domain cannot be empty."
+        )
+
+    # Step 1: Pre-validate syntax and direct IPs (SSRF quarantine)
+    try:
+        canonical_url, hostname, direct_ip = validate_target_url_syntax(target)
+    except SSRFSecurityViolation as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Security check blocked: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid domain or URL format: {str(e)}"
+        )
+
+    parsed = urlparse(canonical_url)
+    domain = parsed.hostname or hostname
+
+    is_resolvable = False
+    resolved_ips = []
+    dns_err_msg = None
+
+    if direct_ip:
+        is_resolvable = True
+        resolved_ips = [direct_ip]
+    else:
+        try:
+            is_resolvable, resolved_ips, dns_err_msg = resolve_and_verify_safe_ips(domain)
+        except SSRFSecurityViolation as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Security check blocked: {str(e)}"
+            )
+
+    # Step 2: Run static heuristics (typosquatting and security simulation detection)
+    typo_res = typosquat_detector.analyze(canonical_url)
+    sim_res = simulation_detector.analyze(canonical_url)
+
+    # Step 3: Run network and threat feed lookups
+    try:
+        if is_resolvable:
+            dns_res = dns_inspector.inspect(domain)
+            ssl_res = ssl_inspector.inspect(domain)
+            results = await asyncio.gather(
+                http_inspector.inspect(canonical_url),
+                urlhaus_client.lookup_url(canonical_url),
+                openphish_client.lookup(canonical_url, domain=domain),
+                google_safe_browsing_client.lookup_url(canonical_url),
+                return_exceptions=True
+            )
+            http_res = results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+            urlhaus_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1])}
+            openphish_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2])}
+            gsb_res = results[3] if not isinstance(results[3], Exception) else {"found": False, "error": str(results[3])}
+        else:
+            results = await asyncio.gather(
+                urlhaus_client.lookup_url(canonical_url),
+                openphish_client.lookup(canonical_url, domain=domain),
+                google_safe_browsing_client.lookup_url(canonical_url),
+                return_exceptions=True
+            )
+            urlhaus_res = results[0] if not isinstance(results[0], Exception) else {"found": False, "error": str(results[0])}
+            openphish_res = results[1] if not isinstance(results[1], Exception) else {"found": False, "error": str(results[1])}
+            gsb_res = results[2] if not isinstance(results[2], Exception) else {"found": False, "error": str(results[2])}
+
+            dns_res = {
+                "domain": domain,
+                "a_records": [],
+                "aaaa_records": [],
+                "mx_records": [],
+                "ns_records": [],
+                "txt_records": [],
+                "has_mx": False,
+                "has_spf": False,
+                "has_dmarc": False,
+                "resolution_time_ms": 0.0,
+                "error": dns_err_msg or "DNS resolution failed (host does not resolve)",
+            }
+
+            # Network checks marked as unavailable
+            ssl_res = {
+                "has_ssl": False,
+                "error": "Host unreachable (DNS resolution failed)",
+            }
+            http_res = {
+                "error": "Host unreachable (DNS resolution failed)",
+                "redirect_count": 0,
+                "redirect_chain": [],
+                "has_password_form": False,
+                "has_external_action": False,
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Investigation engine failure: {str(e)}"
+        )
+
+    # Step 4: Deterministic Evidence-Based Risk Evaluation
+    evaluation = risk_engine.evaluate(
+        target_url=canonical_url,
+        domain=domain,
+        dns_data=dns_res,
+        ssl_data=ssl_res,
+        typosquat_data=typo_res,
+        http_data=http_res,
+        urlhaus_data=urlhaus_res,
+        openphish_data=openphish_res,
+        google_safebrowsing_data=gsb_res,
+        simulation_data=sim_res,
+    )
+
+    verdict = evaluation["verdict"]
+    score = evaluation["risk_score"]
+    threat_types = evaluation["threat_types"]
+    headline = evaluation["consumer_headline"]
+    advice = evaluation["consumer_advice"]
+    concerns = evaluation["concerns"]
+    checks = evaluation["checks"]
+    recommendations = evaluation["recommendations"]
+
+    # Step 5: Threat feed matches & reasons
+    threat_matches = []
+    if urlhaus_res.get("found"):
+        threat_matches.append(f"URLhaus Malware Feed: {urlhaus_res.get('threat', 'Malicious')}")
+    if openphish_res.get("found"):
+        threat_matches.append("OpenPhish Verified Phishing Feed")
+    if gsb_res.get("found"):
+        threat_matches.append(f"Google Safe Browsing: {gsb_res.get('threat', 'Phishing')}")
+
+    reasons = [c.plain_explanation for c in concerns if c.plain_explanation]
+    if not reasons:
+        if verdict == RiskVerdict.LOW_RISK:
+            reasons = [
+                f"Domain analyzed: {domain}",
+                "No deceptive brand impersonation patterns found",
+                "No listings in checked threat intelligence databases",
+            ]
+        elif verdict == RiskVerdict.INCONCLUSIVE:
+            reasons = [
+                "Domain does not currently resolve to active IP addresses",
+                "No live website response could be inspected",
+            ]
+
+    # Step 6: AI Cognitive Explanation (Gemini or heuristic fallback)
+    ai_explanation = None
+    try:
+        ai_explanation = await gemini_explainer.explain_url_verdict(
+            target_url=canonical_url,
+            domain=domain,
+            verdict=verdict.value,
+            risk_score=score,
+            threat_types=threat_types,
+            impersonated_brand=typo_res.get("impersonated_brand"),
+            technical_reasons=reasons[:3],
+        )
+    except Exception:
+        ai_explanation = None
+
+    technical_evidence = TechnicalEvidence(
+        dns_records=dns_res,
+        ssl_certificate=ssl_res,
+        http_inspection=http_res,
+        typosquatting=typo_res,
+        urlhaus_match=urlhaus_res,
+        openphish_match=openphish_res,
+        google_safebrowsing_match=gsb_res,
+        simulation_check=sim_res,
+        evidence_timeline=evaluation["evidence_timeline"],
+        evidence_hash=evaluation["evidence_hash"],
+        blockchain_ready=True,
+    )
+
+    return URLScanResponse(
+        target_url=target,
+        normalized_url=canonical_url,
+        domain=domain,
+        verdict=verdict,
+        consumer_headline=headline,
+        consumer_advice=advice,
+        risk_score=score,
+        confidence_score=evaluation["confidence_score"],
+        reasons=reasons,
+        concerns=concerns,
+        checks=checks,
+        recommendations=recommendations,
+        impersonated_brand=typo_res.get("impersonated_brand"),
+        threat_matches=threat_matches,
+        ai_explanation=ai_explanation,
+        technical_evidence=technical_evidence,
+    )
