@@ -124,6 +124,50 @@ REAL_OFFICIAL_ADVISORIES: List[RelatedArticleItem] = [
 ]
 
 
+def get_report_field(report: Any, field_name: str, default: Any = None) -> Any:
+    """
+    Safely retrieves a field value from either:
+    - Pydantic models (v1 or v2)
+    - Python dictionaries / Mapping objects
+    - Standard objects / dataclasses
+    
+    Guarantees zero AttributeError, KeyError, or TypeError even when
+    the field value is None, empty string, or missing.
+    """
+    if report is None:
+        return default
+
+    val = None
+    # 1. Check dictionary / mapping
+    if isinstance(report, dict):
+        val = report.get(field_name)
+    # 2. Check Pydantic model or arbitrary object attribute
+    elif hasattr(report, field_name):
+        val = getattr(report, field_name, None)
+    # 3. Check if object has model_dump (Pydantic v2) or dict (Pydantic v1)
+    elif hasattr(report, "model_dump") and callable(report.model_dump):
+        try:
+            dumped = report.model_dump()
+            if isinstance(dumped, dict):
+                val = dumped.get(field_name)
+        except Exception:
+            val = None
+    elif hasattr(report, "dict") and callable(report.dict):
+        try:
+            dumped = report.dict()
+            if isinstance(dumped, dict):
+                val = dumped.get(field_name)
+        except Exception:
+            val = None
+
+    if val is None:
+        return default
+    return val
+
+
+_get_report_field = get_report_field
+
+
 class ThreatCorrelator:
     """Correlation engine for similar incidents, infrastructure clusters, and public advisories."""
 
@@ -170,15 +214,24 @@ class ThreatCorrelator:
         campaign_confidence = 0.0
 
         for r in reports:
-            # Handle either dict or Pydantic object
-            r_id = getattr(r, "id", None) or r.get("id", "")
-            r_indicator = getattr(r, "target_indicator", None) or r.get("target_indicator", "")
-            r_type = getattr(r, "indicator_type", None) or r.get("indicator_type", "LINK")
-            r_cat = getattr(r, "category", None) or r.get("category", "")
-            r_desc = getattr(r, "description", None) or r.get("description", "")
-            r_status = getattr(r, "status", None) or r.get("status", "RECEIVED")
-            r_created = getattr(r, "created_at", None) or r.get("created_at", datetime.now(timezone.utc))
-            r_verdict = getattr(r, "verdict", None) or r.get("verdict", "PENDING_TRIAGE")
+            # Safely extract all fields whether r is a Pydantic model, dictionary, or mixed object
+            r_id = str(_get_report_field(r, "id") or _get_report_field(r, "report_id", "") or "")
+            r_indicator = str(_get_report_field(r, "target_indicator", "") or "")
+            r_type = str(_get_report_field(r, "indicator_type", "LINK") or "LINK")
+            r_cat = str(_get_report_field(r, "category", "") or "")
+            r_desc = str(_get_report_field(r, "description", "") or "")
+            r_status = str(_get_report_field(r, "status", "RECEIVED") or "RECEIVED")
+            raw_created = _get_report_field(r, "created_at") or datetime.now(timezone.utc)
+            if isinstance(raw_created, str):
+                try:
+                    r_created = datetime.fromisoformat(raw_created.replace("Z", "+00:00"))
+                except Exception:
+                    r_created = datetime.now(timezone.utc)
+            elif isinstance(raw_created, datetime):
+                r_created = raw_created
+            else:
+                r_created = datetime.now(timezone.utc)
+            r_verdict = str(_get_report_field(r, "verdict", "PENDING_TRIAGE") or "PENDING_TRIAGE")
 
             r_clean_ind = r_indicator.strip().lower()
             r_domain = self.extract_domain(r_indicator)
