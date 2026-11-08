@@ -118,6 +118,20 @@ export interface ScanResult {
     hash?: string;
   }>;
   evidence_hash: string;
+  blockchain_ready?: boolean;
+  blockchain_registration?: {
+    status: string;
+    is_registered: boolean;
+    message?: string;
+    tx_hash?: string;
+    block_number?: number;
+    gas_used?: number;
+    report_id?: string;
+    commitment_hash?: string;
+    network?: string;
+    contract_address?: string;
+  };
+  commitment_hash?: string;
   blockchain_tx?: string;
   blockchain_network?: string;
   scanned_at: string;

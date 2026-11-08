@@ -23,6 +23,9 @@ from backend.app.services.feeds.virustotal import virustotal_client
 from backend.app.services.scanner.security_assessor import website_security_assessor
 from backend.app.services.scanner.risk_engine import risk_engine
 from backend.app.services.ai.gemini_explainer import gemini_explainer
+from backend.app.services.blockchain.canonicalizer import compute_report_commitment
+from backend.app.services.blockchain.registry_client import threat_registry_client
+from backend.app.core.config import settings
 
 router = APIRouter()
 
@@ -237,6 +240,42 @@ async def scan_url(request: URLScanRequest):
     except Exception:
         ai_explanation = None
 
+    # Generate canonical commitment and register on-chain if notary is available
+    report_id = f"scan-{evaluation['evidence_hash'][:16]}"
+    _, commitment_hex, _, _ = compute_report_commitment(
+        report_id=report_id,
+        target_type="URL",
+        threat_category=threat_types[0] if threat_types else "BENIGN",
+        risk_score=score,
+        verdict=verdict.value,
+        indicators_count=len(threat_matches) + len(concerns),
+        evidence_digest=evaluation["evidence_hash"],
+    )
+
+    blockchain_res = None
+    if threat_registry_client.is_connected() and settings.NOTARY_SIGNER_PRIVATE_KEY:
+        try:
+            blockchain_res = threat_registry_client.register_report(
+                report_id=report_id,
+                commitment_hash=commitment_hex,
+            )
+        except Exception as e:
+            blockchain_res = {
+                "status": "FAILED",
+                "is_registered": False,
+                "message": str(e),
+                "report_id": report_id,
+                "commitment_hash": commitment_hex,
+            }
+    else:
+        blockchain_res = {
+            "status": "RPC_UNAVAILABLE" if settings.EVM_RPC_URL else "NOT_CONFIGURED",
+            "is_registered": False,
+            "message": "Blockchain notary node standby or offline.",
+            "report_id": report_id,
+            "commitment_hash": commitment_hex,
+        }
+
     technical_evidence = TechnicalEvidence(
         dns_records=dns_res,
         ssl_certificate=ssl_res,
@@ -252,6 +291,8 @@ async def scan_url(request: URLScanRequest):
         evidence_timeline=evaluation["evidence_timeline"],
         evidence_hash=evaluation["evidence_hash"],
         blockchain_ready=True,
+        blockchain_registration=blockchain_res,
+        commitment_hash=commitment_hex,
     )
 
     return URLScanResponse(

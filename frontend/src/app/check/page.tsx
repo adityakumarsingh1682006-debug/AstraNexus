@@ -90,6 +90,30 @@ function CheckContent() {
   const [expandedSecurityFindings, setExpandedSecurityFindings] = useState<Record<string, boolean>>({});
   const [expandedConcernId, setExpandedConcernId] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
+  const [copiedTxHash, setCopiedTxHash] = useState(false);
+  const [isVerifyingOnChain, setIsVerifyingOnChain] = useState(false);
+  const [liveVerificationResult, setLiveVerificationResult] = useState<any>(null);
+
+  const handleVerifyOnChain = async (reportId: string, commitmentHash: string) => {
+    setIsVerifyingOnChain(true);
+    setLiveVerificationResult(null);
+    try {
+      const res = await fetch("/api/v1/registry/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_id: reportId,
+          expected_commitment_hash: commitmentHash,
+        }),
+      });
+      const data = await res.json();
+      setLiveVerificationResult(data);
+    } catch (e: any) {
+      setLiveVerificationResult({ is_verified: false, message: e.message || "Failed to query on-chain registry." });
+    } finally {
+      setIsVerifyingOnChain(false);
+    }
+  };
 
   const toggleSecurityFinding = (id: string) => {
     setExpandedSecurityFindings((prev) => ({
@@ -1230,6 +1254,199 @@ function CheckContent() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 5c. Tamper-Evident Report Verification (Blockchain Threat Registry) */}
+              {urlScanResult.technical_evidence?.blockchain_registration && (
+                <div className="consumer-card p-5 sm:p-6 rounded-2xl border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200/50 dark:border-purple-800/50">
+                        <FileCheck2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                            Verify This Report
+                          </h3>
+                          <span
+                            className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono uppercase",
+                              urlScanResult.technical_evidence.blockchain_registration.status === "CONFIRMED"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : urlScanResult.technical_evidence.blockchain_registration.status === "DUPLICATE"
+                                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                                : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
+                            )}
+                          >
+                            {urlScanResult.technical_evidence.blockchain_registration.status === "CONFIRMED"
+                              ? "IMMUTABLE AUDIT SEAL"
+                              : urlScanResult.technical_evidence.blockchain_registration.status === "DUPLICATE"
+                              ? "PREVIOUSLY REGISTERED"
+                              : "CANONICAL COMMITMENT READY"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Cryptographic proof of investigation authenticity and tamper-evident audit trail
+                        </p>
+                      </div>
+                    </div>
+
+                    {urlScanResult.technical_evidence.blockchain_registration.commitment_hash && (
+                      <button
+                        type="button"
+                        disabled={isVerifyingOnChain}
+                        onClick={() =>
+                          handleVerifyOnChain(
+                            urlScanResult.technical_evidence.blockchain_registration.report_id ||
+                              `scan-${urlScanResult.technical_evidence.evidence_hash.slice(0, 16)}`,
+                            urlScanResult.technical_evidence.blockchain_registration.commitment_hash
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-60 self-start sm:self-auto shadow-sm"
+                      >
+                        {isVerifyingOnChain ? (
+                          <>
+                            <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Verifying On-Chain...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Verify On-Chain Integrity</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Verification Results Banner if queried */}
+                  {liveVerificationResult && (
+                    <div
+                      className={cn(
+                        "p-3.5 rounded-xl border text-xs space-y-1.5",
+                        liveVerificationResult.is_verified
+                          ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200"
+                          : "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-200"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 font-bold">
+                        {liveVerificationResult.is_verified ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                        )}
+                        <span>
+                          {liveVerificationResult.is_verified
+                            ? "On-Chain Audit Verified: Cryptographic Commitment Matches Live Ledger Exactly"
+                            : "Integrity Warning: On-Chain Commitment Mismatch or Unregistered Report"}
+                        </span>
+                      </div>
+                      <div className="font-mono text-[11px] opacity-90">
+                        Status: <strong>{liveVerificationResult.status}</strong>
+                        {liveVerificationResult.network && ` | Network: ${liveVerificationResult.network}`}
+                        {liveVerificationResult.attestation_status && ` | Attestation: ${liveVerificationResult.attestation_status}`}
+                        {liveVerificationResult.initial_timestamp && ` | Block Timestamp: ${new Date(liveVerificationResult.initial_timestamp * 1000).toLocaleString()}`}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audit Metadata Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Registration Status
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">
+                        {urlScanResult.technical_evidence.blockchain_registration.status}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                        {urlScanResult.technical_evidence.blockchain_registration.message || "Recorded in local ledger"}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Ledger Network
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">
+                        {urlScanResult.technical_evidence.blockchain_registration.network || "EVM Localnet (Chain 31337)"}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                        Block #{urlScanResult.technical_evidence.blockchain_registration.block_number ?? "Mined"}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Investigation Timestamp
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">
+                        {new Date(urlScanResult.scanned_at || Date.now()).toLocaleDateString()}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                        {new Date(urlScanResult.scanned_at || Date.now()).toLocaleTimeString()} UTC
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Verification Status
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        {urlScanResult.technical_evidence.blockchain_registration.is_registered
+                          ? "On-Chain Verified"
+                          : "Audit Ready"}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                        Tamper-Evident Standard
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cryptographic Hashes & Tx Reference */}
+                  <div className="space-y-2 pt-1 font-mono text-[11px]">
+                    {urlScanResult.technical_evidence.blockchain_registration.tx_hash && (
+                      <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div className="truncate">
+                          <span className="text-slate-400 mr-2 font-sans text-xs">Transaction Reference:</span>
+                          <span className="text-slate-800 dark:text-slate-200 font-semibold select-all">
+                            {urlScanResult.technical_evidence.blockchain_registration.tx_hash}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof navigator !== "undefined") {
+                              navigator.clipboard.writeText(urlScanResult.technical_evidence.blockchain_registration.tx_hash);
+                              setCopiedTxHash(true);
+                              setTimeout(() => setCopiedTxHash(false), 2000);
+                            }
+                          }}
+                          className="px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] shrink-0 font-sans flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                        >
+                          {copiedTxHash ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedTxHash ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {urlScanResult.technical_evidence.blockchain_registration.commitment_hash && (
+                      <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div className="truncate">
+                          <span className="text-slate-400 mr-2 font-sans text-xs">Report Commitment:</span>
+                          <span className="text-purple-600 dark:text-purple-400 font-semibold select-all">
+                            {urlScanResult.technical_evidence.blockchain_registration.commitment_hash}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-sans shrink-0 hidden sm:inline">
+                          Salted Keccak-256
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

@@ -15,8 +15,14 @@ backend/.venv/
 *.pytest_cache/
 .pytest_cache/
 
+# Blockchain & Hardhat
+blockchain/node_modules/
+blockchain/cache/
+blockchain/artifacts/
+
 # Environment Variables & Secrets (NEVER COMMIT)
 .env
+backend/.env
 .env.local
 .env.*.local
 *.pem

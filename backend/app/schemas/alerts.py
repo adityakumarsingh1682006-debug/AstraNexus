@@ -35,3 +35,5 @@ class CommunityReportResponse(BaseModel):
     status: str  # "RECEIVED", "INVESTIGATING", "VERIFIED_THREAT", "CLOSED"
     created_at: datetime
     verdict: Optional[str] = None
+    blockchain_registration: Optional[dict] = None
+    commitment_hash: Optional[str] = None

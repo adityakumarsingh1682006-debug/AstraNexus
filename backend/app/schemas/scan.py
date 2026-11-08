@@ -64,6 +64,8 @@ class TechnicalEvidence(BaseModel):
     evidence_timeline: List[Dict[str, Any]] = Field(default_factory=list)
     evidence_hash: str
     blockchain_ready: bool = True
+    blockchain_registration: Optional[Dict[str, Any]] = None
+    commitment_hash: Optional[str] = None
 
 
 class URLScanResponse(BaseModel):
